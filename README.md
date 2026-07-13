@@ -46,6 +46,22 @@ Beim **ersten Aufruf im Browser** legst du ein App-Passwort fest (mind.
 8 Zeichen). Danach sind alle Seiten und die JSON-API nur noch nach Anmeldung
 erreichbar; die Session hält 7 Tage. Öffentlich bleibt nur `/health`.
 
+## Gemeinsam nutzen im Heimnetz (z. B. zweites MacBook)
+
+Kiara muss nur auf **einem** Rechner laufen – weitere Personen greifen einfach
+per Browser darauf zu (gemeinsames Archiv, gemeinsame Datenbank):
+
+1. In der `.env` auf dem Rechner, der Kiara ausführt: `KIARA_HOST=0.0.0.0`
+2. Kiara neu starten (`python run.py`). macOS fragt beim ersten Mal, ob
+   eingehende Verbindungen erlaubt werden sollen → **Erlauben**.
+3. Auf dem anderen Rechner im selben WLAN öffnen:
+   `http://<Rechnername>.local:8000` (den Namen zeigt macOS unter
+   Systemeinstellungen → Allgemein → Info, z. B. `MacBook-Pro.local`).
+4. Mit demselben Kiara-Passwort anmelden – beide können parallel arbeiten.
+
+Der Rechner mit Kiara muss dafür an und wach sein (macOS: Ruhezustand
+verhindern oder `caffeinate -s python run.py`).
+
 ## Konto anbinden
 
 1. In der Weboberfläche auf **Konten → Neues Konto anbinden**.
