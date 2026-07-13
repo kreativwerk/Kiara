@@ -46,6 +46,40 @@ Beim **ersten Aufruf im Browser** legst du ein App-Passwort fest (mind.
 8 Zeichen). Danach sind alle Seiten und die JSON-API nur noch nach Anmeldung
 erreichbar; die Session hält 7 Tage. Öffentlich bleibt nur `/health`.
 
+## Online betreiben – immer & mobil erreichbar (empfohlen)
+
+Damit Kiara unabhängig von euren Rechnern läuft und auch **vom Handy**
+erreichbar ist, betreibt man es auf einem kleinen Server (z. B. Hetzner-VPS,
+~5 €/Monat, Standort Deutschland). Docker-Setup mit automatischem HTTPS ist
+enthalten:
+
+```bash
+# Auf dem Server (Ubuntu, Docker installiert):
+git clone https://github.com/kreativwerk/Kiara.git && cd Kiara
+echo "KIARA_DOMAIN=kiara.deine-domain.de" > .env
+docker compose up -d
+```
+
+Schritt für Schritt von null:
+
+1. **Server mieten**: [Hetzner Cloud](https://www.hetzner.com/cloud) → Projekt →
+   Server erstellen (kleinstes Modell reicht, Ubuntu 24.04, Standort DE).
+2. **Docker installieren**: `curl -fsSL https://get.docker.com | sh`
+3. **Domain zeigen lassen**: Beim Domain-Anbieter einen **A-Record** auf die
+   Server-IP setzen (z. B. `kiara.deine-domain.de`).
+4. Die drei Befehle oben ausführen. Caddy holt automatisch ein
+   Let's-Encrypt-Zertifikat → `https://kiara.deine-domain.de` läuft.
+5. Im Browser das App-Passwort festlegen – fertig. Am Handy: Seite öffnen und
+   „Zum Home-Bildschirm hinzufügen" → fühlt sich wie eine App an.
+
+Alle Daten (Datenbank, Belege, Schlüssel) liegen im Docker-Volume
+`kiara-data`. Backup z. B. per
+`docker run --rm -v kiara_kiara-data:/data -v $(pwd):/backup alpine tar czf /backup/kiara-backup.tar.gz /data`.
+
+Sicherheit im Internetbetrieb: Login-Pflicht mit **Rate-Limit** (max. 5
+Fehlversuche pro IP in 5 Minuten), HTTPS-only-Cookies, Passwörter/Tokens
+verschlüsselt.
+
 ## Gemeinsam nutzen im Heimnetz (z. B. zweites MacBook)
 
 Kiara muss nur auf **einem** Rechner laufen – weitere Personen greifen einfach

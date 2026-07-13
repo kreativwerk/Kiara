@@ -1,0 +1,4 @@
+{$KIARA_DOMAIN} {
+	reverse_proxy kiara:8000
+	encode gzip
+}

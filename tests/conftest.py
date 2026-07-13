@@ -46,8 +46,10 @@ def anon_client():
     from fastapi.testclient import TestClient
 
     from app.main import app
+    from app.routers.auth import login_limiter
 
     _truncate()
+    login_limiter.reset_all()  # Login-Versuche nicht zwischen Tests durchschleppen
     with TestClient(app) as test_client:
         yield test_client
 

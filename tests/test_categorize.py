@@ -14,8 +14,20 @@ def test_categorize_default():
     assert categorize("foto.pdf", "Urlaubsgrüße") == "sonstiges"
 
 
+def test_categorize_fahrzeug():
+    assert categorize("TÜV-Bericht_LKW_MAN.pdf") == "fahrzeug"
+    assert categorize("scan.pdf", "Hauptuntersuchung fällig") == "fahrzeug"
+    # Speziellere Kategorie gewinnt gegen "rechnung":
+    assert categorize("Werkstatt-Rechnung_2026.pdf") == "fahrzeug"
+
+
+def test_categorize_versicherung():
+    assert categorize("Versicherungsschein_Flotte.pdf") == "versicherung"
+
+
 def test_is_document():
     assert is_document("beleg.PDF")
     assert is_document("scan.jpg")
+    assert is_document("foto.HEIC")
     assert not is_document("signature.p7s")
     assert not is_document("logo.gif")

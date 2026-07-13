@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # (z.B. für den Zugriff von einem zweiten MacBook aus).
     host: str = "127.0.0.1"
     port: int = 8000
+    # True, wenn Kiara hinter HTTPS läuft (z.B. Caddy/nginx als Reverse-Proxy):
+    # Session-Cookies werden dann nur über HTTPS übertragen.
+    secure_cookies: bool = False
 
     @property
     def db_path(self) -> Path:
