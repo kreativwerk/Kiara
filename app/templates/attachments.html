@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Belege{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Belege &amp; Anhänge</h1></div>
+
+<section class="card">
+    <form method="get" action="/attachments" class="filter-bar">
+        <select name="account_id">
+            <option value="">Alle Konten</option>
+            {% for a in accounts %}
+            <option value="{{ a.id }}" {{ 'selected' if f_account == a.id else '' }}>{{ a.name }}</option>
+            {% endfor %}
+        </select>
+        <select name="category">
+            <option value="">Alle Kategorien</option>
+            {% for c in categories %}
+            <option value="{{ c }}" {{ 'selected' if f_category == c else '' }}>{{ c }}</option>
+            {% endfor %}
+        </select>
+        <select name="year">
+            <option value="">Alle Jahre</option>
+            {% for y in years %}
+            <option value="{{ y }}" {{ 'selected' if f_year == y else '' }}>{{ y }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="q" value="{{ f_q }}" placeholder="Suche in Datei/Betreff">
+        <button type="submit" class="btn">Filtern</button>
+        <a href="/attachments" class="btn ghost">Zurücksetzen</a>
+    </form>
+</section>
+
+<section class="card">
+    <p class="muted small">{{ attachments | length }} Belege (max. 500 angezeigt)</p>
+    {% if attachments %}
+    <table class="table">
+        <thead>
+            <tr><th>Datei</th><th>Kategorie</th><th>Absender</th><th>Zeitraum</th><th class="right">Betrag</th><th></th></tr>
+        </thead>
+        <tbody>
+        {% for att in attachments %}
+        <tr>
+            <td>{{ att.filename }}<br><small class="muted">{{ att.subject or '' }}</small></td>
+            <td><span class="tag tag-{{ att.category }}">{{ att.category }}</span></td>
+            <td class="muted small">{{ att.sender_email or '–' }}</td>
+            <td>{{ att.month | monthname }} {{ att.year or '' }}</td>
+            <td class="right">{{ att.detected_amount | euro }}</td>
+            <td><a class="btn small" href="/attachments/{{ att.id }}/download">Download</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Keine Belege gefunden.</p>
+    {% endif %}
+</section>
+{% endblock %}

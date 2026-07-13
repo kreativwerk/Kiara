@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Konten{% endblock %}
+{% block content %}
+<div class="page-head"><h1>E-Mail-Konten</h1></div>
+
+<section class="card">
+    <h2>Neues Konto anbinden</h2>
+    <form method="post" action="/accounts" class="form-grid">
+        <label>Bezeichnung
+            <input type="text" name="name" placeholder="z.B. Buchhaltung IONOS" required>
+        </label>
+        <label>Anbieter
+            <select name="provider" id="provider-select">
+                {% for key, p in providers.items() %}
+                <option value="{{ key }}" data-host="{{ p.host }}" data-port="{{ p.port }}">{{ p.label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>IMAP-Server
+            <input type="text" name="host" id="host-input" placeholder="imap.ionos.de">
+        </label>
+        <label>Port
+            <input type="number" name="port" id="port-input" value="993">
+        </label>
+        <label class="checkbox">
+            <input type="checkbox" name="use_ssl" value="true" checked> SSL/TLS
+        </label>
+        <label>Benutzername (E-Mail)
+            <input type="text" name="username" placeholder="konto@arion-logistics.de" required>
+        </label>
+        <label>Passwort
+            <input type="password" name="password" required>
+        </label>
+        <label>Ordner (kommagetrennt)
+            <input type="text" name="folders" value="INBOX">
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="btn primary">Konto speichern</button>
+        </div>
+    </form>
+    <p class="muted small">Das Passwort wird verschlüsselt gespeichert. Tipp: Bei GMX/IONOS ggf. IMAP in den Kontoeinstellungen aktivieren.</p>
+</section>
+
+<section class="card">
+    <h2>Angebundene Konten</h2>
+    {% if accounts %}
+    <table class="table">
+        <thead><tr><th>Name</th><th>Server</th><th>Benutzer</th><th>Status</th><th>Aktionen</th></tr></thead>
+        <tbody>
+        {% for a in accounts %}
+        <tr>
+            <td>{{ a.name }}</td>
+            <td>{{ a.host }}:{{ a.port }}</td>
+            <td>{{ a.username }}</td>
+            <td>
+                {% if a.last_error %}
+                    <span class="badge err" title="{{ a.last_error }}">Fehler</span>
+                {% elif a.last_synced_at %}
+                    <span class="badge ok">Sync {{ a.last_synced_at | datefmt }}</span>
+                {% else %}
+                    <span class="badge">bereit</span>
+                {% endif %}
+            </td>
+            <td class="actions">
+                <form method="post" action="/accounts/{{ a.id }}/test"><button class="btn small">Testen</button></form>
+                <form method="post" action="/accounts/{{ a.id }}/sync"><button class="btn small primary">Sync</button></form>
+                <form method="post" action="/accounts/{{ a.id }}/delete" onsubmit="return confirm('Konto wirklich löschen?');"><button class="btn small danger">Löschen</button></form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Noch keine Konten. Lege oben dein erstes an.</p>
+    {% endif %}
+</section>
+{% endblock %}

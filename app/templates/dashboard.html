@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Übersicht{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>Übersicht</h1>
+    <form method="post" action="/sync">
+        <button type="submit" class="btn primary">Alle Konten synchronisieren</button>
+    </form>
+</div>
+
+<section class="cards">
+    <div class="card stat"><span class="num">{{ account_count }}</span><span class="lbl">Konten</span></div>
+    <div class="card stat"><span class="num">{{ email_count }}</span><span class="lbl">E-Mails</span></div>
+    <div class="card stat"><span class="num">{{ attachment_count }}</span><span class="lbl">Belege</span></div>
+    <div class="card stat"><span class="num">{{ txn_count }}</span><span class="lbl">Banktransaktionen</span></div>
+    <div class="card stat"><span class="num">{{ matched }}</span><span class="lbl">Zuordnungen</span></div>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>Belege nach Kategorie</h2>
+        {% if by_category %}
+        <table class="table">
+            <tbody>
+            {% for cat, count in by_category %}
+                <tr>
+                    <td><span class="tag tag-{{ cat }}">{{ cat }}</span></td>
+                    <td class="right">{{ count }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="muted">Noch keine Belege archiviert.</p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <h2>Konten</h2>
+        {% if accounts %}
+        <ul class="account-list">
+            {% for a in accounts %}
+            <li>
+                <span>{{ a.name }} <small class="muted">({{ a.host }})</small></span>
+                {% if a.last_error %}
+                    <span class="badge err">Fehler</span>
+                {% elif a.last_synced_at %}
+                    <span class="badge ok">{{ a.last_synced_at | datefmt }}</span>
+                {% else %}
+                    <span class="badge">nie synchronisiert</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">Noch kein Konto angebunden. <a href="/accounts">Jetzt hinzufügen →</a></p>
+        {% endif %}
+    </section>
+</div>
+
+<section class="card">
+    <h2>Zuletzt archivierte Belege</h2>
+    {% if recent %}
+    <table class="table">
+        <thead><tr><th>Datei</th><th>Kategorie</th><th>Zeitraum</th><th class="right">Betrag</th><th></th></tr></thead>
+        <tbody>
+        {% for att in recent %}
+        <tr>
+            <td>{{ att.filename }}</td>
+            <td><span class="tag tag-{{ att.category }}">{{ att.category }}</span></td>
+            <td>{{ att.month | monthname }} {{ att.year or '' }}</td>
+            <td class="right">{{ att.detected_amount | euro }}</td>
+            <td><a href="/attachments/{{ att.id }}/download">↓</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Noch nichts da – lege ein Konto an und synchronisiere.</p>
+    {% endif %}
+</section>
+{% endblock %}

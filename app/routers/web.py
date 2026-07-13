@@ -1,0 +1,365 @@
+"""HTML-Oberfläche von Kiara."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from ..config import get_settings
+from ..database import get_db
+from ..models import (
+    Attachment,
+    BankStatement,
+    BankTransaction,
+    Email,
+    EmailAccount,
+    Match,
+)
+from ..providers import PROVIDERS, get_provider
+from ..security import encrypt
+from ..services import bank_import, imap_client, matching
+from ..services.sync import sync_account, sync_all
+from ..templating import templates
+
+router = APIRouter()
+
+
+def _redirect(path: str, msg: str | None = None, error: bool = False) -> RedirectResponse:
+    if msg:
+        key = "error" if error else "msg"
+        sep = "&" if "?" in path else "?"
+        path = f"{path}{sep}{key}={msg}"
+    return RedirectResponse(path, status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+
+@router.get("/")
+def dashboard(request: Request, db: Session = Depends(get_db)):
+    account_count = db.scalar(select(func.count()).select_from(EmailAccount)) or 0
+    attachment_count = db.scalar(select(func.count()).select_from(Attachment)) or 0
+    email_count = db.scalar(select(func.count()).select_from(Email)) or 0
+    txn_count = db.scalar(select(func.count()).select_from(BankTransaction)) or 0
+    matched = db.scalar(select(func.count()).select_from(Match)) or 0
+
+    by_category = db.execute(
+        select(Attachment.category, func.count())
+        .group_by(Attachment.category)
+        .order_by(func.count().desc())
+    ).all()
+
+    recent = db.execute(
+        select(Attachment).order_by(Attachment.created_at.desc()).limit(10)
+    ).scalars().all()
+
+    accounts = db.execute(select(EmailAccount).order_by(EmailAccount.name)).scalars().all()
+
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        {
+            "account_count": account_count,
+            "attachment_count": attachment_count,
+            "email_count": email_count,
+            "txn_count": txn_count,
+            "matched": matched,
+            "by_category": by_category,
+            "recent": recent,
+            "accounts": accounts,
+            "msg": request.query_params.get("msg"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Konten
+# ---------------------------------------------------------------------------
+
+
+@router.get("/accounts")
+def accounts_page(request: Request, db: Session = Depends(get_db)):
+    accounts = db.execute(select(EmailAccount).order_by(EmailAccount.name)).scalars().all()
+    return templates.TemplateResponse(
+        request,
+        "accounts.html",
+        {
+            "accounts": accounts,
+            "providers": PROVIDERS,
+            "msg": request.query_params.get("msg"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/accounts")
+def create_account(
+    db: Session = Depends(get_db),
+    name: str = Form(...),
+    provider: str = Form("custom"),
+    host: str = Form(""),
+    port: int = Form(993),
+    use_ssl: bool = Form(False),
+    username: str = Form(...),
+    password: str = Form(...),
+    folders: str = Form("INBOX"),
+):
+    preset = get_provider(provider)
+    resolved_host = host.strip() or preset.host
+    if not resolved_host:
+        return _redirect("/accounts", "Bitte einen IMAP-Server angeben.", error=True)
+
+    account = EmailAccount(
+        name=name.strip(),
+        provider=provider,
+        host=resolved_host,
+        port=port or preset.port,
+        use_ssl=bool(use_ssl),
+        username=username.strip(),
+        password_enc=encrypt(password),
+        folders=folders.strip() or "INBOX",
+        active=True,
+    )
+    db.add(account)
+    db.commit()
+    return _redirect("/accounts", f"Konto '{account.name}' angelegt.")
+
+
+@router.post("/accounts/{account_id}/test")
+def test_account(account_id: int, db: Session = Depends(get_db)):
+    account = db.get(EmailAccount, account_id)
+    if not account:
+        return _redirect("/accounts", "Konto nicht gefunden.", error=True)
+    from ..security import decrypt
+
+    ok, message, _ = imap_client.test_connection(
+        account.host, account.port, account.use_ssl, account.username, decrypt(account.password_enc)
+    )
+    return _redirect("/accounts", message, error=not ok)
+
+
+@router.post("/accounts/{account_id}/sync")
+def sync_one(account_id: int, db: Session = Depends(get_db)):
+    account = db.get(EmailAccount, account_id)
+    if not account:
+        return _redirect("/accounts", "Konto nicht gefunden.", error=True)
+    result = sync_account(db, account)
+    return _redirect("/accounts", result.message, error=not result.ok)
+
+
+@router.post("/accounts/{account_id}/delete")
+def delete_account(account_id: int, db: Session = Depends(get_db)):
+    account = db.get(EmailAccount, account_id)
+    if account:
+        db.delete(account)
+        db.commit()
+    return _redirect("/accounts", "Konto gelöscht.")
+
+
+@router.post("/sync")
+def sync_everything(db: Session = Depends(get_db)):
+    results = sync_all(db)
+    total_att = sum(r.new_attachments for r in results)
+    total_mail = sum(r.new_emails for r in results)
+    msg = f"Synchronisierung fertig: {total_mail} E-Mails, {total_att} Anhänge."
+    if results:
+        matching.reconcile(db)
+    return _redirect("/", msg)
+
+
+# ---------------------------------------------------------------------------
+# Anhänge / Belege
+# ---------------------------------------------------------------------------
+
+
+@router.get("/attachments")
+def attachments_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    account_id: int | None = None,
+    category: str | None = None,
+    year: int | None = None,
+    q: str | None = None,
+):
+    stmt = select(Attachment).order_by(Attachment.year.desc(), Attachment.month.desc())
+    if account_id:
+        stmt = stmt.where(Attachment.account_id == account_id)
+    if category:
+        stmt = stmt.where(Attachment.category == category)
+    if year:
+        stmt = stmt.where(Attachment.year == year)
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(
+            Attachment.filename.ilike(like) | Attachment.subject.ilike(like)
+        )
+    attachments = db.execute(stmt.limit(500)).scalars().all()
+
+    accounts = db.execute(select(EmailAccount).order_by(EmailAccount.name)).scalars().all()
+    categories = db.execute(
+        select(Attachment.category).distinct().order_by(Attachment.category)
+    ).scalars().all()
+    years = db.execute(
+        select(Attachment.year).distinct().order_by(Attachment.year.desc())
+    ).scalars().all()
+
+    return templates.TemplateResponse(
+        request,
+        "attachments.html",
+        {
+            "attachments": attachments,
+            "accounts": accounts,
+            "categories": categories,
+            "years": [y for y in years if y],
+            "f_account": account_id,
+            "f_category": category,
+            "f_year": year,
+            "f_q": q or "",
+        },
+    )
+
+
+@router.get("/attachments/{attachment_id}/download")
+def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
+    attachment = db.get(Attachment, attachment_id)
+    if not attachment:
+        return _redirect("/attachments", "Anhang nicht gefunden.", error=True)
+    settings = get_settings()
+    full_path = settings.data_dir / attachment.stored_path
+    if not full_path.exists():
+        return _redirect("/attachments", "Datei nicht mehr vorhanden.", error=True)
+    return FileResponse(
+        str(full_path),
+        filename=attachment.filename,
+        media_type=attachment.content_type or "application/octet-stream",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Bank / Gegenkontrolle
+# ---------------------------------------------------------------------------
+
+
+@router.get("/bank")
+def bank_page(request: Request, db: Session = Depends(get_db)):
+    statements = db.execute(
+        select(BankStatement).order_by(BankStatement.imported_at.desc())
+    ).scalars().all()
+
+    transactions = db.execute(
+        select(BankTransaction).order_by(BankTransaction.booking_date.desc()).limit(500)
+    ).scalars().all()
+
+    # Zuordnungen vorbereiten: transaction_id -> Match
+    matches = db.execute(select(Match)).scalars().all()
+    match_by_txn = {m.transaction_id: m for m in matches}
+
+    total = len(transactions)
+    matched = sum(1 for t in transactions if t.id in match_by_txn)
+
+    return templates.TemplateResponse(
+        request,
+        "bank.html",
+        {
+            "statements": statements,
+            "transactions": transactions,
+            "match_by_txn": match_by_txn,
+            "total": total,
+            "matched": matched,
+            "unmatched": total - matched,
+            "msg": request.query_params.get("msg"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/bank/upload")
+async def upload_statement(
+    db: Session = Depends(get_db),
+    name: str = Form(""),
+    file: UploadFile = Form(...),
+):
+    content = await file.read()
+    if not content:
+        return _redirect("/bank", "Leere Datei.", error=True)
+
+    filename = file.filename or "kontoauszug"
+    try:
+        parsed = bank_import.parse_statement(filename, content)
+    except Exception as exc:  # noqa: BLE001
+        return _redirect("/bank", f"Datei konnte nicht gelesen werden: {exc}", error=True)
+
+    if not parsed.transactions:
+        return _redirect("/bank", "Keine Transaktionen erkannt.", error=True)
+
+    settings = get_settings()
+    saved_path = settings.statements_dir / Path(filename).name
+    saved_path.write_bytes(content)
+
+    statement = BankStatement(
+        name=name.strip() or Path(filename).stem,
+        source_filename=filename,
+        file_format=parsed.file_format,
+        account_iban=parsed.account_iban,
+    )
+    db.add(statement)
+    db.flush()
+
+    seen: set[str] = set()
+    imported = 0
+    for txn in parsed.transactions:
+        h = txn.dedupe_hash
+        if h in seen:
+            continue
+        seen.add(h)
+        db.add(
+            BankTransaction(
+                statement_id=statement.id,
+                booking_date=txn.booking_date,
+                value_date=txn.value_date,
+                amount=txn.amount,
+                currency=txn.currency,
+                counterparty=txn.counterparty,
+                purpose=txn.purpose,
+                reference=txn.reference,
+                dedupe_hash=h,
+            )
+        )
+        imported += 1
+    db.commit()
+
+    created = matching.reconcile(db)
+    return _redirect(
+        "/bank",
+        f"{imported} Transaktionen importiert, {created} Belege automatisch zugeordnet.",
+    )
+
+
+@router.post("/bank/reconcile")
+def run_reconcile(db: Session = Depends(get_db)):
+    created = matching.reconcile(db)
+    return _redirect("/bank", f"Gegenkontrolle aktualisiert: {created} Zuordnungen gefunden.")
+
+
+@router.post("/matches/{match_id}/confirm")
+def confirm_match(match_id: int, db: Session = Depends(get_db)):
+    match = db.get(Match, match_id)
+    if match:
+        match.confirmed = True
+        db.commit()
+    return _redirect("/bank", "Zuordnung bestätigt.")
+
+
+@router.post("/matches/{match_id}/delete")
+def delete_match(match_id: int, db: Session = Depends(get_db)):
+    match = db.get(Match, match_id)
+    if match:
+        db.delete(match)
+        db.commit()
+    return _redirect("/bank", "Zuordnung entfernt.")

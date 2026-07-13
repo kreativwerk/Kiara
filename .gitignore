@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Kiara runtime data
+/data/
+*.sqlite
+*.sqlite3
+*.db
+.kiara_key
+.env
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

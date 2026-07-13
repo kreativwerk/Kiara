@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Gegenkontrolle{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>Kontoauszug &amp; Gegenkontrolle</h1>
+    <form method="post" action="/bank/reconcile">
+        <button type="submit" class="btn">Gegenkontrolle neu berechnen</button>
+    </form>
+</div>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>Kontoauszug hochladen</h2>
+        <form method="post" action="/bank/upload" enctype="multipart/form-data" class="form-grid">
+            <label>Bezeichnung (optional)
+                <input type="text" name="name" placeholder="z.B. Geschäftskonto Juni 2026">
+            </label>
+            <label>Datei (CSV, CAMT.053/XML oder MT940)
+                <input type="file" name="file" required>
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="btn primary">Importieren &amp; abgleichen</button>
+            </div>
+        </form>
+        <p class="muted small">Unterstützt CSV-Exporte deutscher Banken, ISO-20022 CAMT.053 (XML) und MT940.</p>
+    </section>
+
+    <section class="card">
+        <h2>Abgleich-Status</h2>
+        <div class="cards">
+            <div class="card stat"><span class="num">{{ total }}</span><span class="lbl">Transaktionen</span></div>
+            <div class="card stat ok"><span class="num">{{ matched }}</span><span class="lbl">mit Beleg</span></div>
+            <div class="card stat warn"><span class="num">{{ unmatched }}</span><span class="lbl">ohne Beleg</span></div>
+        </div>
+        {% if statements %}
+        <h3>Importierte Auszüge</h3>
+        <ul class="account-list">
+            {% for s in statements %}
+            <li><span>{{ s.name }} <small class="muted">({{ s.file_format | upper }})</small></span>
+                <span class="badge">{{ s.transactions | length }} Buchungen</span></li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </section>
+</div>
+
+<section class="card">
+    <h2>Transaktionen</h2>
+    {% if transactions %}
+    <table class="table">
+        <thead>
+            <tr><th>Datum</th><th>Empfänger / Zweck</th><th class="right">Betrag</th><th>Beleg</th><th></th></tr>
+        </thead>
+        <tbody>
+        {% for t in transactions %}
+        {% set m = match_by_txn.get(t.id) %}
+        <tr class="{{ 'row-matched' if m else 'row-unmatched' }}">
+            <td>{{ t.booking_date | datefmt }}</td>
+            <td>
+                <strong>{{ t.counterparty or '–' }}</strong><br>
+                <small class="muted">{{ (t.purpose or '')[:90] }}</small>
+            </td>
+            <td class="right {{ 'neg' if t.amount < 0 else 'pos' }}">{{ t.amount | euro }}</td>
+            <td>
+                {% if m %}
+                    <a href="/attachments/{{ m.attachment.id }}/download">{{ m.attachment.filename }}</a>
+                    <span class="badge {{ 'ok' if m.confirmed else '' }}">
+                        {{ 'bestätigt' if m.confirmed else ('%.0f%%' % (m.score * 100)) }}
+                    </span>
+                {% else %}
+                    <span class="muted small">kein Beleg</span>
+                {% endif %}
+            </td>
+            <td class="actions">
+                {% if m and not m.confirmed %}
+                <form method="post" action="/matches/{{ m.id }}/confirm"><button class="btn small primary">✓</button></form>
+                <form method="post" action="/matches/{{ m.id }}/delete"><button class="btn small danger">✕</button></form>
+                {% elif m and m.confirmed %}
+                <form method="post" action="/matches/{{ m.id }}/delete"><button class="btn small">lösen</button></form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Noch kein Kontoauszug importiert.</p>
+    {% endif %}
+</section>
+{% endblock %}
