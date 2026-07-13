@@ -131,3 +131,16 @@ body {
 .account-list li { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px solid var(--line); }
 
 .footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 2rem 1rem; }
+
+.logout-form { margin-left: auto; }
+.auth-box { max-width: 420px; margin: 4rem auto; }
+.auth-box h1 { margin-top: 0; font-size: 1.35rem; }
+.form-grid.single { grid-template-columns: 1fr; }
+
+.drive-status { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0 1.25rem; }
+.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+.steps > li { padding: 1rem 0; border-top: 1px solid var(--line); }
+.steps > li:first-child { border-top: none; }
+.inline-form { display: inline-flex; align-items: center; gap: .5rem; margin: .5rem .75rem .25rem 0; }
+code { background: #eef1f7; padding: .1rem .35rem; border-radius: 5px; font-size: .85em; word-break: break-all; }
+button:disabled { opacity: .5; cursor: not-allowed; }

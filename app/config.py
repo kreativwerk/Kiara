@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     data_dir: Path = Path("./data")
     secret_key: str = ""
     max_fetch: int = 0
+    # 127.0.0.1 = nur dieser Rechner; 0.0.0.0 = im Heimnetz erreichbar
+    # (z.B. für den Zugriff von einem zweiten MacBook aus).
+    host: str = "127.0.0.1"
+    port: int = 8000
 
     @property
     def db_path(self) -> Path:

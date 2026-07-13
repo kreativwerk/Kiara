@@ -12,7 +12,7 @@ from ..categorize import is_document
 from ..config import get_settings
 from ..models import Attachment, Email, EmailAccount
 from ..security import decrypt
-from . import imap_client
+from . import gdrive, imap_client, mirror
 from .attachments import store_attachment
 
 log = logging.getLogger("kiara.sync")
@@ -130,6 +130,13 @@ def sync_account(db: Session, account: EmailAccount, max_fetch: int | None = Non
         result.message = (
             f"{result.new_emails} neue E-Mails, {result.new_attachments} Anhänge archiviert."
         )
+        # Optional: neue (und ggf. liegengebliebene) Belege nach Google Drive spiegeln.
+        if result.new_attachments and gdrive.is_enabled(db):
+            drive = gdrive.build_mirror(db)
+            if drive is not None:
+                mirrored, _failed = mirror.mirror_all(db, drive)
+                if mirrored:
+                    result.message += f" {mirrored} nach Drive gespiegelt."
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         result.ok = False

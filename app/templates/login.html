@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Anmelden{% endblock %}
+{% block content %}
+<div class="auth-box card">
+    <h1>🔐 Anmelden</h1>
+    <p class="muted">Bitte gib dein Kiara-Passwort ein.</p>
+    <form method="post" action="/login" class="form-grid single">
+        <label>Passwort
+            <input type="password" name="password" autofocus required>
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="btn primary">Anmelden</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
