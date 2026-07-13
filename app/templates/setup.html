@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Einrichtung{% endblock %}
+{% block content %}
+<div class="auth-box card">
+    <h1>👋 Willkommen bei Kiara</h1>
+    <p class="muted">
+        Lege einmalig ein Passwort fest, um dein Belegarchiv zu schützen.
+        Du brauchst es künftig zum Anmelden.
+    </p>
+    <form method="post" action="/setup" class="form-grid single">
+        <label>Passwort (mind. 8 Zeichen)
+            <input type="password" name="password" minlength="8" autofocus required>
+        </label>
+        <label>Passwort wiederholen
+            <input type="password" name="password2" minlength="8" required>
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="btn primary">Passwort festlegen &amp; starten</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

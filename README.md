@@ -20,6 +20,7 @@ haben – und welche noch fehlen.
 - 🏦 **Kontoauszug-Import**: CSV (dt. Banken), CAMT.053, MT940
 - ✅ **Gegenkontrolle**: automatischer Abgleich Beleg ↔ Banktransaktion
 - ☁️ **Optionale Google-Drive-Spiegelung** (unterwegs alle Belege dabei)
+- 🔐 **Login-Schutz**: Passwort beim ersten Start festlegen, Session-Cookie
 - 🌐 **Web-Oberfläche** + **JSON-API** + **CLI** (für Cron)
 
 ## Schnellstart
@@ -40,6 +41,10 @@ python run.py
 Beim ersten Start werden Datenbank (`data/kiara.sqlite`) und Verzeichnisse
 automatisch angelegt. Der Verschlüsselungsschlüssel wird – falls nicht per
 `KIARA_SECRET_KEY` gesetzt – einmalig in `data/.kiara_key` erzeugt.
+
+Beim **ersten Aufruf im Browser** legst du ein App-Passwort fest (mind.
+8 Zeichen). Danach sind alle Seiten und die JSON-API nur noch nach Anmeldung
+erreichbar; die Session hält 7 Tage. Öffentlich bleibt nur `/health`.
 
 ## Konto anbinden
 
@@ -153,7 +158,10 @@ FastAPI · SQLAlchemy 2 · SQLite · Jinja2 · cryptography (Fernet) · pdfplumb
 ## Sicherheit & Datenschutz
 
 - Alle Daten bleiben **lokal** auf deinem System.
-- Postfach-Passwörter werden verschlüsselt gespeichert; der Schlüssel liegt in
-  `data/.kiara_key` (nicht ins Git einchecken – steht in `.gitignore`).
-- Für den Produktivbetrieb hinter einem Reverse-Proxy sollte zusätzlich eine
-  Zugriffs-Authentifizierung vorgeschaltet werden.
+- Die Oberfläche und die API sind durch ein **App-Passwort** geschützt
+  (PBKDF2-gehasht, Session über verschlüsseltes HTTP-only-Cookie).
+- Postfach-Passwörter und das Google-OAuth-Token werden verschlüsselt
+  gespeichert; der Schlüssel liegt in `data/.kiara_key` (nicht ins Git
+  einchecken – steht in `.gitignore`).
+- Für den Betrieb über das Internet zusätzlich HTTPS verwenden (z. B. über
+  einen Reverse-Proxy wie Caddy oder nginx).

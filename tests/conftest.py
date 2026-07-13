@@ -37,8 +37,12 @@ def db():
         session.close()
 
 
+TEST_PASSWORD = "test-passwort-123"
+
+
 @pytest.fixture
-def client():
+def anon_client():
+    """Client ohne Anmeldung (für Auth-Tests)."""
     from fastapi.testclient import TestClient
 
     from app.main import app
@@ -46,3 +50,15 @@ def client():
     _truncate()
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def client(anon_client):
+    """Angemeldeter Client: legt das App-Passwort an und loggt sich ein."""
+    resp = anon_client.post(
+        "/setup",
+        data={"password": TEST_PASSWORD, "password2": TEST_PASSWORD},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    return anon_client

@@ -9,6 +9,7 @@
 <body>
 <header class="topbar">
     <a class="brand" href="/">📎 Kiara</a>
+    {% if request.cookies.get('kiara_session') %}
     <nav>
         <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">Übersicht</a>
         <a href="/accounts" class="{{ 'active' if request.url.path.startswith('/accounts') else '' }}">Konten</a>
@@ -16,6 +17,10 @@
         <a href="/bank" class="{{ 'active' if request.url.path.startswith('/bank') else '' }}">Gegenkontrolle</a>
         <a href="/settings" class="{{ 'active' if request.url.path.startswith('/settings') else '' }}">Einstellungen</a>
     </nav>
+    <form method="post" action="/logout" class="logout-form">
+        <button type="submit" class="btn small ghost">Abmelden</button>
+    </form>
+    {% endif %}
 </header>
 
 <main class="container">
