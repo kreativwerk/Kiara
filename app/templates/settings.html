@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Einstellungen</h1></div>
+
+<section class="card">
+    <h2>☁️ Google Drive (optional)</h2>
+    <p class="muted">
+        Spiegelt dein Belegarchiv zusätzlich nach Google Drive – gleiche Ordnerstruktur
+        (Konto/Jahr/Monat). So hast du alle Belege auch unterwegs in der Drive-App dabei.
+        Deine lokalen Dateien bleiben die Quelle der Wahrheit.
+    </p>
+
+    <div class="drive-status">
+        <span class="badge {{ 'ok' if drive.google_libs else 'err' }}">
+            Bibliotheken {{ 'installiert' if drive.google_libs else 'fehlen' }}
+        </span>
+        <span class="badge {{ 'ok' if drive.client_secret else '' }}">
+            OAuth-Zugangsdaten {{ 'vorhanden' if drive.client_secret else 'fehlen' }}
+        </span>
+        <span class="badge {{ 'ok' if drive.connected else '' }}">
+            {{ 'verbunden' if drive.connected else 'nicht verbunden' }}
+        </span>
+        <span class="badge {{ 'ok' if drive.enabled else '' }}">
+            Spiegelung {{ 'aktiv' if drive.enabled else 'aus' }}
+        </span>
+    </div>
+
+    {% if not drive.google_libs %}
+    <p class="muted small">
+        Installiere die Google-Bibliotheken:
+        <code>pip install google-api-python-client google-auth-oauthlib</code>
+    </p>
+    {% endif %}
+
+    <ol class="steps">
+        <li>
+            <strong>1. OAuth-Zugangsdaten hochladen</strong>
+            <p class="muted small">
+                In der <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>
+                eine OAuth-Client-ID (Typ „Webanwendung") erstellen, die Drive-API aktivieren und
+                als Redirect-URI diese Adresse eintragen:
+                <code>{{ request.base_url }}settings/drive/callback</code>.
+                Die heruntergeladene <code>client_secret*.json</code> hier hochladen.
+            </p>
+            <form method="post" action="/settings/drive/client-secret" enctype="multipart/form-data" class="inline-form">
+                <input type="file" name="file" accept="application/json" required>
+                <button type="submit" class="btn">Hochladen</button>
+            </form>
+        </li>
+        <li>
+            <strong>2. Konto verbinden</strong>
+            {% if drive.connected %}
+                <p class="muted small">Verbunden. Zielordner: <code>{{ drive.root_folder }}</code></p>
+                <form method="post" action="/settings/drive/disconnect" class="inline-form">
+                    <button class="btn danger small">Verbindung trennen</button>
+                </form>
+            {% else %}
+                <p><a class="btn primary" href="/settings/drive/connect">Mit Google verbinden</a></p>
+            {% endif %}
+        </li>
+        <li>
+            <strong>3. Spiegelung ein-/ausschalten</strong>
+            <form method="post" action="/settings/drive/toggle" class="inline-form">
+                <label class="checkbox">
+                    <input type="checkbox" name="enabled" value="true" {{ 'checked' if drive.enabled else '' }}
+                        onchange="this.form.submit()">
+                    Neue Belege automatisch nach Drive spiegeln
+                </label>
+            </form>
+            <form method="post" action="/settings/drive/mirror-now" class="inline-form">
+                <button class="btn" {{ 'disabled' if not drive.connected else '' }}>
+                    Jetzt alles spiegeln ({{ unsynced }} offen)
+                </button>
+            </form>
+        </li>
+    </ol>
+</section>
+{% endblock %}

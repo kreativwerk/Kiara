@@ -18,9 +18,10 @@ from ..models import (
     EmailAccount,
     Match,
 )
+from .. import settings_store as store
 from ..providers import PROVIDERS, get_provider
 from ..security import encrypt
-from ..services import bank_import, imap_client, matching
+from ..services import bank_import, gdrive, imap_client, matching, mirror
 from ..services.sync import sync_account, sync_all
 from ..templating import templates
 
@@ -363,3 +364,96 @@ def delete_match(match_id: int, db: Session = Depends(get_db)):
         db.delete(match)
         db.commit()
     return _redirect("/bank", "Zuordnung entfernt.")
+
+
+# ---------------------------------------------------------------------------
+# Einstellungen / Google Drive
+# ---------------------------------------------------------------------------
+
+
+def _drive_redirect_uri(request: Request) -> str:
+    return str(request.url_for("google_callback"))
+
+
+@router.get("/settings")
+def settings_page(request: Request, db: Session = Depends(get_db)):
+    unsynced = db.scalar(
+        select(func.count()).select_from(Attachment).where(Attachment.drive_synced.is_(False))
+    ) or 0
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {
+            "drive": gdrive.status(db),
+            "unsynced": unsynced,
+            "msg": request.query_params.get("msg"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/settings/drive/client-secret")
+async def upload_client_secret(db: Session = Depends(get_db), file: UploadFile = Form(...)):
+    content = await file.read()
+    if not content:
+        return _redirect("/settings", "Leere Datei.", error=True)
+    try:
+        import json
+
+        json.loads(content)  # Validierung: gültiges JSON?
+    except Exception:
+        return _redirect("/settings", "Keine gültige JSON-Datei.", error=True)
+    settings = get_settings()
+    (settings.data_dir / "google_client_secret.json").write_bytes(content)
+    return _redirect("/settings", "OAuth-Zugangsdaten gespeichert. Jetzt Konto verbinden.")
+
+
+@router.get("/settings/drive/connect")
+def google_connect(request: Request, db: Session = Depends(get_db)):
+    if not gdrive.google_libs_available():
+        return _redirect("/settings", "Google-Bibliotheken sind nicht installiert.", error=True)
+    if not gdrive.has_client_secret():
+        return _redirect("/settings", "Bitte zuerst die OAuth-Zugangsdaten hochladen.", error=True)
+    try:
+        auth_url = gdrive.start_oauth(db, _drive_redirect_uri(request))
+    except Exception as exc:  # noqa: BLE001
+        return _redirect("/settings", f"OAuth-Start fehlgeschlagen: {exc}", error=True)
+    return RedirectResponse(auth_url, status_code=303)
+
+
+@router.get("/settings/drive/callback", name="google_callback")
+def google_callback(request: Request, db: Session = Depends(get_db)):
+    try:
+        gdrive.finish_oauth(db, _drive_redirect_uri(request), str(request.url))
+    except Exception as exc:  # noqa: BLE001
+        return _redirect("/settings", f"Verbindung fehlgeschlagen: {exc}", error=True)
+    return _redirect("/settings", "Google Drive erfolgreich verbunden.")
+
+
+@router.post("/settings/drive/toggle")
+def toggle_drive(db: Session = Depends(get_db), enabled: bool = Form(False)):
+    if enabled and not gdrive.is_connected(db):
+        return _redirect("/settings", "Erst Google Drive verbinden.", error=True)
+    store.set_bool(db, store.DRIVE_ENABLED, bool(enabled))
+    state = "aktiviert" if enabled else "deaktiviert"
+    return _redirect("/settings", f"Drive-Spiegelung {state}.")
+
+
+@router.post("/settings/drive/mirror-now")
+def mirror_now(db: Session = Depends(get_db)):
+    if not gdrive.is_connected(db):
+        return _redirect("/settings", "Google Drive ist nicht verbunden.", error=True)
+    drive = gdrive.build_mirror(db)
+    if drive is None:
+        return _redirect("/settings", "Drive-Verbindung nicht verfügbar.", error=True)
+    ok, failed = mirror.mirror_all(db, drive)
+    msg = f"{ok} Belege nach Drive gespiegelt."
+    if failed:
+        msg += f" {failed} fehlgeschlagen."
+    return _redirect("/settings", msg, error=failed > 0)
+
+
+@router.post("/settings/drive/disconnect")
+def google_disconnect(db: Session = Depends(get_db)):
+    gdrive.disconnect(db)
+    return _redirect("/settings", "Google Drive getrennt.")

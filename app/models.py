@@ -93,6 +93,8 @@ class Attachment(Base):
     detected_amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     sender_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     subject: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drive_file_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    drive_synced: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     account: Mapped[EmailAccount] = relationship(back_populates="attachments")
@@ -138,6 +140,15 @@ class BankTransaction(Base):
     matches: Mapped[list["Match"]] = relationship(
         back_populates="transaction", cascade="all, delete-orphan"
     )
+
+
+class AppSetting(Base):
+    """Einfacher Schlüssel-Wert-Speicher für App-Einstellungen (z.B. Drive)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Match(Base):
