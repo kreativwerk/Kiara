@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Konto bearbeiten{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Konto bearbeiten: {{ account.name }}</h1></div>
+
+<section class="card">
+    <form method="post" action="/accounts/{{ account.id }}/edit" class="form-grid">
+        <label>Bezeichnung
+            <input type="text" name="name" value="{{ account.name }}" required>
+        </label>
+        <label>IMAP-Server
+            <input type="text" name="host" value="{{ account.host }}" required>
+        </label>
+        <label>Port
+            <input type="number" name="port" value="{{ account.port }}">
+        </label>
+        <label class="checkbox">
+            <input type="checkbox" name="use_ssl" value="true" {{ 'checked' if account.use_ssl else '' }}> SSL/TLS
+        </label>
+        <label>Benutzername (E-Mail)
+            <input type="text" name="username" value="{{ account.username }}" required>
+        </label>
+        <label>Neues Passwort (leer = unverändert)
+            <input type="password" name="password" placeholder="••••••••">
+        </label>
+        <label>Ordner (kommagetrennt, * = alle Ordner)
+            <input type="text" name="folders" value="{{ account.folders }}">
+        </label>
+        <label class="checkbox">
+            <input type="checkbox" name="active" value="true" {{ 'checked' if account.active else '' }}> Konto aktiv (wird synchronisiert)
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="btn primary">Speichern</button>
+            <a href="/accounts" class="btn ghost">Abbrechen</a>
+        </div>
+    </form>
+    <p class="muted small">
+        Tipp: <code>*</code> im Ordner-Feld synchronisiert <strong>alle Ordner</strong> des
+        Postfachs (ohne Spam, Papierkorb, Entwürfe und Gesendet) – so werden auch Belege
+        aus Unterordnern wie „Rechnungen" gefunden.
+    </p>
+</section>
+{% endblock %}

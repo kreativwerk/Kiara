@@ -124,6 +124,14 @@ verhindern oder `caffeinate -s python run.py`).
 > Hinweis: Bei GMX und IONOS muss der **IMAP-Zugriff** ggf. in den
 > Kontoeinstellungen des Anbieters aktiviert sein.
 
+Das Ordner-Feld steuert, was durchsucht wird: `*` (Standard) heißt **alle
+Ordner** außer Spam/Papierkorb/Entwürfe/Gesendet – so werden auch Belege aus
+Unterordnern wie „Rechnungen" gefunden. Alternativ eine kommagetrennte Liste
+(z. B. `INBOX, Rechnungen`). Der Sync läuft **im Hintergrund**; der Stand
+erscheint direkt beim Konto. Große Postfächer werden chronologisch abgearbeitet
+– der Sync merkt sich seinen Fortschritt und setzt beim nächsten Lauf fort.
+Konten lassen sich über **Bearbeiten** anpassen (Passwort, Ordner, aktiv/inaktiv).
+
 Presets:
 
 | Anbieter | IMAP-Server            | Port |

@@ -31,8 +31,8 @@
         <label>Passwort
             <input type="password" name="password" required>
         </label>
-        <label>Ordner (kommagetrennt)
-            <input type="text" name="folders" value="INBOX">
+        <label>Ordner (kommagetrennt, * = alle Ordner)
+            <input type="text" name="folders" value="*">
         </label>
         <div class="form-actions">
             <button type="submit" class="btn primary">Konto speichern</button>
@@ -60,10 +60,14 @@
                 {% else %}
                     <span class="badge">bereit</span>
                 {% endif %}
+                {% if a.last_sync_result %}
+                    <br><small class="muted">{{ a.last_sync_result }}</small>
+                {% endif %}
             </td>
             <td class="actions">
                 <form method="post" action="/accounts/{{ a.id }}/test"><button class="btn small">Testen</button></form>
                 <form method="post" action="/accounts/{{ a.id }}/sync"><button class="btn small primary">Sync</button></form>
+                <a class="btn small" href="/accounts/{{ a.id }}/edit">Bearbeiten</a>
                 <form method="post" action="/accounts/{{ a.id }}/delete" onsubmit="return confirm('Konto wirklich löschen?');"><button class="btn small danger">Löschen</button></form>
             </td>
         </tr>
