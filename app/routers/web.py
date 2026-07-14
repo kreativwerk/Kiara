@@ -48,6 +48,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     email_count = db.scalar(select(func.count()).select_from(Email)) or 0
     txn_count = db.scalar(select(func.count()).select_from(BankTransaction)) or 0
     matched = db.scalar(select(func.count()).select_from(Match)) or 0
+    match_pct = round(matched / txn_count * 100) if txn_count else 0
 
     by_category = db.execute(
         select(Attachment.category, func.count())
@@ -70,6 +71,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "email_count": email_count,
             "txn_count": txn_count,
             "matched": matched,
+            "match_pct": match_pct,
             "by_category": by_category,
             "recent": recent,
             "accounts": accounts,
