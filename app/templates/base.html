@@ -6,35 +6,70 @@
     <title>{% block title %}Kiara{% endblock %} · Kiara</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
-<header class="topbar">
-    <a class="brand" href="/">📎 Kiara</a>
-    {% if request.cookies.get('kiara_session') %}
-    <nav>
-        <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">Übersicht</a>
-        <a href="/accounts" class="{{ 'active' if request.url.path.startswith('/accounts') else '' }}">Konten</a>
-        <a href="/attachments" class="{{ 'active' if request.url.path.startswith('/attachments') else '' }}">Belege</a>
-        <a href="/bank" class="{{ 'active' if request.url.path.startswith('/bank') else '' }}">Gegenkontrolle</a>
-        <a href="/settings" class="{{ 'active' if request.url.path.startswith('/settings') else '' }}">Einstellungen</a>
+{% set authed = request.cookies.get('kiara_session') %}
+<body class="{{ 'app' if authed else 'anon' }}">
+
+{% if authed %}
+<aside class="sidebar">
+    {# Logo-Platzhalter: wird durch das echte Kiara-Office-Logo ersetzt #}
+    <a class="brand" href="/"><span class="brand-logo">📎</span><span class="brand-name">Kiara</span></a>
+
+    <span class="nav-label">Navigation</span>
+    <nav class="side-nav">
+        <a href="/" title="Übersicht" class="{{ 'active' if request.url.path == '/' else '' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+            <span class="nav-text">Übersicht</span>
+        </a>
+        <a href="/accounts" title="Konten" class="{{ 'active' if request.url.path.startswith('/accounts') else '' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+            <span class="nav-text">Konten</span>
+        </a>
+        <a href="/attachments" title="Belege" class="{{ 'active' if request.url.path.startswith('/attachments') else '' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+            <span class="nav-text">Belege</span>
+        </a>
+        <a href="/bank" title="Gegenkontrolle" class="{{ 'active' if request.url.path.startswith('/bank') else '' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 5-6"/></svg>
+            <span class="nav-text">Gegenkontrolle</span>
+        </a>
+        <a href="/settings" title="Einstellungen" class="{{ 'active' if request.url.path.startswith('/settings') else '' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8h8M18 8h2M4 16h2M12 16h8"/><circle cx="15" cy="8" r="2.5"/><circle cx="9" cy="16" r="2.5"/></svg>
+            <span class="nav-text">Einstellungen</span>
+        </a>
     </nav>
-    <form method="get" action="/search" class="topbar-search">
-        <input type="search" name="q" placeholder="🔍 Suchen … auch Beträge" value="{{ request.query_params.get('q', '') if request.url.path == '/search' else '' }}">
-    </form>
-    <form method="post" action="/logout" class="logout-form">
-        <button type="submit" class="btn small ghost">Abmelden</button>
-    </form>
+
+    <div class="sidebar-foot">
+        <form method="post" action="/logout">
+            <button type="submit" class="logout-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+                <span class="nav-text">Abmelden</span>
+            </button>
+        </form>
+    </div>
+</aside>
+{% endif %}
+
+<div class="content">
+    {% if authed %}
+    <header class="content-head">
+        <form method="get" action="/search" class="topbar-search">
+            <input type="search" name="q" placeholder="🔍 Suchen … auch Beträge"
+                   value="{{ request.query_params.get('q', '') if request.url.path == '/search' else '' }}">
+        </form>
+    </header>
     {% endif %}
-</header>
 
-<main class="container">
-    {% if msg %}<div class="flash success">{{ msg }}</div>{% endif %}
-    {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
-    {% block content %}{% endblock %}
-</main>
+    <main class="container">
+        {% if msg %}<div class="flash success">{{ msg }}</div>{% endif %}
+        {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+        {% block content %}{% endblock %}
+    </main>
 
-<footer class="footer">
-    Kiara – Belegarchiv &amp; Buchhaltungs-Gegenkontrolle
-</footer>
+    <footer class="footer">
+        Kiara – Belegarchiv &amp; Buchhaltungs-Gegenkontrolle
+    </footer>
+</div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

@@ -13,10 +13,29 @@
     <div class="card stat"><span class="num">{{ email_count }}</span><span class="lbl">E-Mails</span></div>
     <div class="card stat"><span class="num">{{ attachment_count }}</span><span class="lbl">Belege</span></div>
     <div class="card stat"><span class="num">{{ txn_count }}</span><span class="lbl">Banktransaktionen</span></div>
-    <div class="card stat"><span class="num">{{ matched }}</span><span class="lbl">Zuordnungen</span></div>
+    <div class="card stat ok"><span class="num">{{ matched }}</span><span class="lbl">Zuordnungen</span></div>
 </section>
 
-<div class="grid-2">
+<div class="grid-3">
+    <section class="card">
+        <h2>Gegenkontrolle</h2>
+        {% if txn_count %}
+        <div class="donut-wrap">
+            <div class="donut" style="--pct: {{ match_pct }};">
+                <span class="donut-num">{{ match_pct }}%</span>
+            </div>
+            <ul class="donut-legend">
+                <li><span class="dot dot-good"></span> mit Beleg <strong>{{ matched }}</strong></li>
+                <li><span class="dot dot-warn"></span> ohne Beleg <strong>{{ txn_count - matched }}</strong></li>
+            </ul>
+        </div>
+        <p class="muted small" style="margin-bottom:0"><a href="/bank">Zur Gegenkontrolle →</a></p>
+        {% else %}
+        <p class="muted">Noch kein Kontoauszug importiert.</p>
+        <p class="muted small"><a href="/bank">Jetzt hochladen →</a></p>
+        {% endif %}
+    </section>
+
     <section class="card">
         <h2>Belege nach Kategorie</h2>
         {% if by_category %}
@@ -41,7 +60,7 @@
         <ul class="account-list">
             {% for a in accounts %}
             <li>
-                <span>{{ a.name }} <small class="muted">({{ a.host }})</small></span>
+                <span>{{ a.name }}<br><small class="muted">{{ a.host }}</small></span>
                 {% if a.last_error %}
                     <span class="badge err">Fehler</span>
                 {% elif a.last_synced_at %}
