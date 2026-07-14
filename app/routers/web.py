@@ -271,18 +271,25 @@ def search_page(request: Request, db: Session = Depends(get_db), q: str = ""):
 def attachments_page(
     request: Request,
     db: Session = Depends(get_db),
-    account_id: int | None = None,
-    category: str | None = None,
-    year: int | None = None,
-    q: str | None = None,
+    # Als Strings entgegennehmen: das Filter-Formular schickt leere Werte
+    # (""), die als "kein Filter" gelten müssen statt einen Fehler auszulösen.
+    account_id: str = "",
+    category: str = "",
+    year: str = "",
+    q: str = "",
 ):
+    account_filter = int(account_id) if account_id.strip().isdigit() else None
+    year_filter = int(year) if year.strip().isdigit() else None
+    category = category.strip()
+    q = q.strip()
+
     stmt = select(Attachment).order_by(Attachment.year.desc(), Attachment.month.desc())
-    if account_id:
-        stmt = stmt.where(Attachment.account_id == account_id)
+    if account_filter:
+        stmt = stmt.where(Attachment.account_id == account_filter)
     if category:
         stmt = stmt.where(Attachment.category == category)
-    if year:
-        stmt = stmt.where(Attachment.year == year)
+    if year_filter:
+        stmt = stmt.where(Attachment.year == year_filter)
     if q:
         like = f"%{q}%"
         stmt = stmt.where(
@@ -306,9 +313,9 @@ def attachments_page(
             "accounts": accounts,
             "categories": categories,
             "years": [y for y in years if y],
-            "f_account": account_id,
+            "f_account": account_filter,
             "f_category": category,
-            "f_year": year,
+            "f_year": year_filter,
             "f_q": q or "",
         },
     )
