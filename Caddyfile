@@ -2,3 +2,8 @@
 	reverse_proxy kiara:8000
 	encode gzip
 }
+
+# www.<domain> leitet dauerhaft auf die Hauptadresse um.
+www.{$KIARA_DOMAIN} {
+	redir https://{$KIARA_DOMAIN}{uri} permanent
+}
