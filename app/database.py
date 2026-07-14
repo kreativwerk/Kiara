@@ -24,11 +24,36 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
+def _ensure_columns(target_engine) -> None:
+    """Mini-Migration: ergänzt fehlende (nullable) Spalten in bestehenden Tabellen.
+
+    ``create_all`` legt nur neue Tabellen an. Kommt in einer neuen Version eine
+    Spalte hinzu, ergänzt dieser Schritt sie per ``ALTER TABLE`` – so überleben
+    bestehende Datenbanken ein Update ohne manuelle Migration.
+    """
+    import sqlalchemy as sa
+
+    inspector = sa.inspect(target_engine)
+    with target_engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                continue
+            existing = {col["name"] for col in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing:
+                    continue
+                col_type = column.type.compile(target_engine.dialect)
+                conn.execute(
+                    sa.text(f'ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}')
+                )
+
+
 def init_db() -> None:
-    """Erstellt alle Tabellen (idempotent)."""
+    """Erstellt alle Tabellen (idempotent) und ergänzt fehlende Spalten."""
     from . import models  # noqa: F401  (Modelle registrieren)
 
     Base.metadata.create_all(bind=engine)
+    _ensure_columns(engine)
 
 
 def get_db() -> Generator[Session, None, None]:

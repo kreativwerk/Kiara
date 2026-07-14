@@ -10,9 +10,16 @@ from pathlib import Path
 
 from ..categorize import categorize
 from ..config import get_settings
+from . import ocr
 from .text_utils import extract_amounts, safe_filename, slugify
 
 log = logging.getLogger("kiara.attachments")
+
+# Liefert pdfplumber weniger Text als das, ist die PDF vermutlich ein Scan.
+MIN_TEXT_FOR_NO_OCR = 32
+
+
+MAX_TEXT_LENGTH = 20_000  # Zeichen Volltext, die pro Beleg gespeichert werden
 
 
 @dataclass
@@ -27,6 +34,7 @@ class StoredFile:
     month: int
     category: str
     detected_amount: Decimal | None
+    text_content: str | None
 
 
 def _target_dir(account_name: str, when: datetime) -> Path:
@@ -40,8 +48,8 @@ def _target_dir(account_name: str, when: datetime) -> Path:
     )
 
 
-def extract_pdf_amount(path: Path) -> Decimal | None:
-    """Bester Versuch, den (größten) Betrag aus einer PDF-Rechnung zu lesen."""
+def extract_pdf_text(path: Path, max_pages: int = 5) -> str | None:
+    """Extrahiert den Text einer PDF (Grundlage für Betragserkennung und Suche)."""
     if path.suffix.lower() != ".pdf":
         return None
     try:
@@ -51,13 +59,34 @@ def extract_pdf_amount(path: Path) -> Decimal | None:
     try:
         text_parts: list[str] = []
         with pdfplumber.open(str(path)) as pdf:
-            for page in pdf.pages[:5]:
+            for page in pdf.pages[:max_pages]:
                 text_parts.append(page.extract_text() or "")
-        amounts = extract_amounts("\n".join(text_parts))
-        return max(amounts) if amounts else None
+        text = "\n".join(text_parts).strip()
+        return text[:MAX_TEXT_LENGTH] or None
     except Exception as exc:  # pragma: no cover - defensiv gegen kaputte PDFs
-        log.warning("PDF-Betrag konnte nicht gelesen werden (%s): %s", path.name, exc)
+        log.warning("PDF-Text konnte nicht gelesen werden (%s): %s", path.name, exc)
         return None
+
+
+def extract_text(path: Path) -> str | None:
+    """Bester verfügbarer Text für eine Datei: PDF-Text, sonst OCR.
+
+    - PDF mit echtem Text: pdfplumber (schnell)
+    - PDF ohne/mit kaum Text (Scan): OCR über die gerenderten Seiten
+    - Bilder (JPG/PNG/HEIC/...): direkt OCR
+    """
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        text = extract_pdf_text(path)
+        if text and len(text) >= MIN_TEXT_FOR_NO_OCR:
+            return text
+        ocr_text = ocr.ocr_pdf(path)
+        result = ocr_text or text
+        return result[:MAX_TEXT_LENGTH] if result else None
+    if suffix in ocr.IMAGE_EXTENSIONS:
+        text = ocr.ocr_image(path)
+        return text[:MAX_TEXT_LENGTH] if text else None
+    return None
 
 
 def store_attachment(
@@ -81,7 +110,9 @@ def store_attachment(
     settings = get_settings()
     relative_path = str(stored_path.relative_to(settings.data_dir))
     category = categorize(clean_name, subject)
-    detected_amount = extract_pdf_amount(stored_path)
+    text_content = extract_text(stored_path)
+    amounts = extract_amounts(text_content) if text_content else []
+    detected_amount = max(amounts) if amounts else None
 
     return StoredFile(
         sha256=sha256,
@@ -92,4 +123,5 @@ def store_attachment(
         month=when.month,
         category=category,
         detected_amount=detected_amount,
+        text_content=text_content,
     )

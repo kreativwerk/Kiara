@@ -6,10 +6,19 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from .. import auth
+from ..config import get_settings
 from ..database import get_db
+from ..ratelimit import RateLimiter
 from ..templating import templates
 
 router = APIRouter()
+
+# Bremst Brute-Force auf das App-Passwort: max. 5 Versuche pro IP in 5 Minuten.
+login_limiter = RateLimiter(max_attempts=5, window_seconds=300)
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
 
 
 def _login_response(redirect_to: str = "/") -> RedirectResponse:
@@ -20,6 +29,7 @@ def _login_response(redirect_to: str = "/") -> RedirectResponse:
         max_age=auth.SESSION_MAX_AGE,
         httponly=True,
         samesite="lax",
+        secure=get_settings().secure_cookies,
     )
     return response
 
@@ -63,9 +73,16 @@ def login_page(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-def do_login(db: Session = Depends(get_db), password: str = Form(...)):
+def do_login(request: Request, db: Session = Depends(get_db), password: str = Form(...)):
+    ip = _client_ip(request)
+    if not login_limiter.allow(ip):
+        return RedirectResponse(
+            "/login?error=Zu viele Fehlversuche. Bitte ein paar Minuten warten.",
+            status_code=303,
+        )
     if not auth.check_password(db, password):
         return RedirectResponse("/login?error=Falsches Passwort.", status_code=303)
+    login_limiter.reset(ip)
     return _login_response("/")
 
 

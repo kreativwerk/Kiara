@@ -18,6 +18,10 @@ haben – und welche noch fehlen.
 - 🏷️ **Automatische Kategorisierung** (Rechnung, Beleg, Gutschrift, Mahnung, …)
 - 💶 **Betragserkennung** aus PDF-Rechnungen (pdfplumber)
 - 🏦 **Kontoauszug-Import**: CSV (dt. Banken), CAMT.053, MT940
+- 🔍 **Smarte Suche**: tippfehlertolerant, Volltext über PDF-Inhalte,
+  Betragssuche („119,00"), Zeitraum-Erkennung („juni 2026")
+- 📖 **OCR-Texterkennung**: auch gescannte Belege und Foto-Anhänge
+  (JPG/PNG/HEIC) werden durchsuchbar, Beträge werden erkannt
 - ✅ **Gegenkontrolle**: automatischer Abgleich Beleg ↔ Banktransaktion
 - ☁️ **Optionale Google-Drive-Spiegelung** (unterwegs alle Belege dabei)
 - 🔐 **Login-Schutz**: Passwort beim ersten Start festlegen, Session-Cookie
@@ -45,6 +49,40 @@ automatisch angelegt. Der Verschlüsselungsschlüssel wird – falls nicht per
 Beim **ersten Aufruf im Browser** legst du ein App-Passwort fest (mind.
 8 Zeichen). Danach sind alle Seiten und die JSON-API nur noch nach Anmeldung
 erreichbar; die Session hält 7 Tage. Öffentlich bleibt nur `/health`.
+
+## Online betreiben – immer & mobil erreichbar (empfohlen)
+
+Damit Kiara unabhängig von euren Rechnern läuft und auch **vom Handy**
+erreichbar ist, betreibt man es auf einem kleinen Server (z. B. Hetzner-VPS,
+~5 €/Monat, Standort Deutschland). Docker-Setup mit automatischem HTTPS ist
+enthalten:
+
+```bash
+# Auf dem Server (Ubuntu, Docker installiert):
+git clone https://github.com/kreativwerk/Kiara.git && cd Kiara
+echo "KIARA_DOMAIN=kiara.deine-domain.de" > .env
+docker compose up -d
+```
+
+Schritt für Schritt von null:
+
+1. **Server mieten**: [Hetzner Cloud](https://www.hetzner.com/cloud) → Projekt →
+   Server erstellen (kleinstes Modell reicht, Ubuntu 24.04, Standort DE).
+2. **Docker installieren**: `curl -fsSL https://get.docker.com | sh`
+3. **Domain zeigen lassen**: Beim Domain-Anbieter einen **A-Record** auf die
+   Server-IP setzen (z. B. `kiara.deine-domain.de`).
+4. Die drei Befehle oben ausführen. Caddy holt automatisch ein
+   Let's-Encrypt-Zertifikat → `https://kiara.deine-domain.de` läuft.
+5. Im Browser das App-Passwort festlegen – fertig. Am Handy: Seite öffnen und
+   „Zum Home-Bildschirm hinzufügen" → fühlt sich wie eine App an.
+
+Alle Daten (Datenbank, Belege, Schlüssel) liegen im Docker-Volume
+`kiara-data`. Backup z. B. per
+`docker run --rm -v kiara_kiara-data:/data -v $(pwd):/backup alpine tar czf /backup/kiara-backup.tar.gz /data`.
+
+Sicherheit im Internetbetrieb: Login-Pflicht mit **Rate-Limit** (max. 5
+Fehlversuche pro IP in 5 Minuten), HTTPS-only-Cookies, Passwörter/Tokens
+verschlüsselt.
 
 ## Gemeinsam nutzen im Heimnetz (z. B. zweites MacBook)
 
@@ -81,6 +119,36 @@ Presets:
 | WEB.DE   | `imap.web.de`          | 993  |
 | Gmail    | `imap.gmail.com`       | 993  |
 | Outlook  | `outlook.office365.com`| 993  |
+
+## Suche
+
+Das Suchfeld oben rechts (oder `/search`) durchsucht Dateinamen, Betreff,
+Absender, Kategorie **und den Textinhalt der PDFs**:
+
+- **Tippfehler-tolerant**: „rechnng telekom" findet die Telekom-Rechnung
+- **Umlaute egal**: „tuv" findet den TÜV-Bericht
+- **Beträge**: „119,00" oder „119" trifft den erkannten Belegbetrag
+- **Zeiträume**: „2026" filtert aufs Jahr, „juni" auf den Monat –
+  kombinierbar: „werkstatt juni 2026"
+
+Der PDF-Text wird beim Sync automatisch erfasst. Belege aus der Zeit davor
+lassen sich nachindexieren: `python -m app.cli index`
+
+### OCR für Scans & Fotos
+
+Gescannte PDFs (ohne echten Text) und Bild-Anhänge (JPG, PNG, HEIC, …)
+werden per **Tesseract-OCR** gelesen – so tauchen auch abfotografierte
+Kassenbons in der Suche auf. Im **Docker-Setup ist OCR bereits enthalten**;
+bei manueller Installation:
+
+```bash
+# Linux:  apt install tesseract-ocr tesseract-ocr-deu
+# macOS:  brew install tesseract tesseract-lang
+```
+
+Ohne Tesseract läuft Kiara normal weiter, nur ohne Texterkennung für Scans
+(Status siehe Seite „Einstellungen"). Sprache per `KIARA_OCR_LANG`
+(Standard `deu+eng`). Bestandsbelege: `python -m app.cli index`.
 
 ## Gegenkontrolle
 

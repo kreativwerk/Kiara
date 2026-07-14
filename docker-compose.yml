@@ -1,0 +1,36 @@
+# Kiara online betreiben: App + Caddy (automatisches HTTPS via Let's Encrypt).
+#
+#   1. Domain auf die Server-IP zeigen lassen (DNS A-Record)
+#   2. .env anlegen:  KIARA_DOMAIN=kiara.example.de
+#   3. docker compose up -d
+#
+# Ohne KIARA_DOMAIN lauscht Caddy auf "localhost" (Selbsttest).
+
+services:
+  kiara:
+    build: .
+    restart: unless-stopped
+    environment:
+      KIARA_SECURE_COOKIES: "true"
+    volumes:
+      - kiara-data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      KIARA_DOMAIN: ${KIARA_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - kiara
+
+volumes:
+  kiara-data:
+  caddy-data:
+  caddy-config:

@@ -4,6 +4,27 @@
 <div class="page-head"><h1>Einstellungen</h1></div>
 
 <section class="card">
+    <h2>📖 Texterkennung (OCR)</h2>
+    <p class="muted">
+        Liest gescannte Belege und Foto-Anhänge (JPG, PNG, HEIC …), damit sie in der
+        Suche auftauchen und Beträge erkannt werden.
+    </p>
+    <div class="drive-status">
+        <span class="badge {{ 'ok' if ocr_available else 'err' }}">
+            {{ 'aktiv (Tesseract gefunden)' if ocr_available else 'nicht verfügbar' }}
+        </span>
+    </div>
+    {% if not ocr_available %}
+    <p class="muted small">
+        Installation: <code>apt install tesseract-ocr tesseract-ocr-deu</code> (Linux)
+        bzw. <code>brew install tesseract tesseract-lang</code> (macOS) –
+        im Docker-Setup ist OCR bereits enthalten. Bestandsbelege danach mit
+        <code>python -m app.cli index</code> nachindexieren.
+    </p>
+    {% endif %}
+</section>
+
+<section class="card">
     <h2>☁️ Google Drive (optional)</h2>
     <p class="muted">
         Spiegelt dein Belegarchiv zusätzlich nach Google Drive – gleiche Ordnerstruktur

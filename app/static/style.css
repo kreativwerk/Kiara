@@ -122,6 +122,8 @@ body {
 .tag-vertrag { background: #f1e9fb; color: #7a3fb8; }
 .tag-gehalt { background: #fff2dc; color: var(--warn); }
 .tag-steuer { background: #e0f2f5; color: #157a8c; }
+.tag-fahrzeug { background: #e8f3e0; color: #4a7a1e; }
+.tag-versicherung { background: #e4eef8; color: #2a6496; }
 
 .badge { display: inline-block; padding: .1rem .5rem; border-radius: 6px; font-size: .75rem; background: #eef1f7; color: var(--muted); }
 .badge.ok { background: #e6f6ee; color: var(--ok); }
@@ -132,7 +134,35 @@ body {
 
 .footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 2rem 1rem; }
 
-.logout-form { margin-left: auto; }
+.topbar-search { margin-left: auto; }
+.topbar-search input {
+    padding: .45rem .7rem; border: 1px solid var(--line); border-radius: 999px;
+    font-size: .88rem; width: 210px; background: var(--bg);
+}
+.topbar-search input:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
+.logout-form { margin-left: 0; }
+
+.search-form { display: flex; gap: .6rem; }
+.search-form input {
+    flex: 1; padding: .7rem .9rem; border: 1px solid var(--line);
+    border-radius: 10px; font-size: 1.05rem;
+}
+.snippet { color: var(--muted); font-style: italic; }
+
+/* Mobil: Tabellen scrollen in ihrer Karte, Topbar bricht sauber um. */
+.card { overflow-x: auto; }
+@media (max-width: 640px) {
+    .topbar { flex-wrap: wrap; gap: .6rem 1rem; padding: .7rem 1rem; }
+    .topbar nav { gap: .8rem; flex-wrap: wrap; order: 3; width: 100%; }
+    .topbar-search { order: 4; width: 100%; margin-left: 0; }
+    .topbar-search input { width: 100%; }
+    .search-form { flex-direction: column; }
+    .container { padding: 0 .75rem; margin-top: 1rem; }
+    .page-head { flex-wrap: wrap; gap: .75rem; }
+    .cards { gap: .6rem; }
+    .card.stat { min-width: 96px; padding: .8rem; }
+    .card.stat .num { font-size: 1.5rem; }
+}
 .auth-box { max-width: 420px; margin: 4rem auto; }
 .auth-box h1 { margin-top: 0; font-size: 1.35rem; }
 .form-grid.single { grid-template-columns: 1fr; }

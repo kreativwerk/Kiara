@@ -21,7 +21,7 @@ from ..models import (
 from .. import settings_store as store
 from ..providers import PROVIDERS, get_provider
 from ..security import encrypt
-from ..services import bank_import, gdrive, imap_client, matching, mirror
+from ..services import bank_import, gdrive, imap_client, matching, mirror, ocr, search as search_service
 from ..services.sync import sync_account, sync_all
 from ..templating import templates
 
@@ -172,6 +172,22 @@ def sync_everything(db: Session = Depends(get_db)):
     if results:
         matching.reconcile(db)
     return _redirect("/", msg)
+
+
+# ---------------------------------------------------------------------------
+# Smarte Suche
+# ---------------------------------------------------------------------------
+
+
+@router.get("/search")
+def search_page(request: Request, db: Session = Depends(get_db), q: str = ""):
+    q = q.strip()
+    hits = search_service.search(db, q) if q else []
+    return templates.TemplateResponse(
+        request,
+        "search.html",
+        {"q": q, "hits": hits},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -385,6 +401,7 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
         "settings.html",
         {
             "drive": gdrive.status(db),
+            "ocr_available": ocr.ocr_available(),
             "unsynced": unsynced,
             "msg": request.query_params.get("msg"),
             "error": request.query_params.get("error"),
