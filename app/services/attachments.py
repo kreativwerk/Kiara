@@ -10,9 +10,13 @@ from pathlib import Path
 
 from ..categorize import categorize
 from ..config import get_settings
+from . import ocr
 from .text_utils import extract_amounts, safe_filename, slugify
 
 log = logging.getLogger("kiara.attachments")
+
+# Liefert pdfplumber weniger Text als das, ist die PDF vermutlich ein Scan.
+MIN_TEXT_FOR_NO_OCR = 32
 
 
 MAX_TEXT_LENGTH = 20_000  # Zeichen Volltext, die pro Beleg gespeichert werden
@@ -64,6 +68,27 @@ def extract_pdf_text(path: Path, max_pages: int = 5) -> str | None:
         return None
 
 
+def extract_text(path: Path) -> str | None:
+    """Bester verfügbarer Text für eine Datei: PDF-Text, sonst OCR.
+
+    - PDF mit echtem Text: pdfplumber (schnell)
+    - PDF ohne/mit kaum Text (Scan): OCR über die gerenderten Seiten
+    - Bilder (JPG/PNG/HEIC/...): direkt OCR
+    """
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        text = extract_pdf_text(path)
+        if text and len(text) >= MIN_TEXT_FOR_NO_OCR:
+            return text
+        ocr_text = ocr.ocr_pdf(path)
+        result = ocr_text or text
+        return result[:MAX_TEXT_LENGTH] if result else None
+    if suffix in ocr.IMAGE_EXTENSIONS:
+        text = ocr.ocr_image(path)
+        return text[:MAX_TEXT_LENGTH] if text else None
+    return None
+
+
 def store_attachment(
     *,
     account_name: str,
@@ -85,7 +110,7 @@ def store_attachment(
     settings = get_settings()
     relative_path = str(stored_path.relative_to(settings.data_dir))
     category = categorize(clean_name, subject)
-    text_content = extract_pdf_text(stored_path)
+    text_content = extract_text(stored_path)
     amounts = extract_amounts(text_content) if text_content else []
     detected_amount = max(amounts) if amounts else None
 

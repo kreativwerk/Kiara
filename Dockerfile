@@ -1,5 +1,10 @@
 FROM python:3.11-slim
 
+# Texterkennung (OCR) für gescannte Belege und Foto-Anhänge.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-deu \
+    && rm -rf /var/lib/apt/lists/*
+
 # Nicht als root laufen lassen.
 RUN useradd --create-home --uid 1000 kiara
 

@@ -20,6 +20,8 @@ haben – und welche noch fehlen.
 - 🏦 **Kontoauszug-Import**: CSV (dt. Banken), CAMT.053, MT940
 - 🔍 **Smarte Suche**: tippfehlertolerant, Volltext über PDF-Inhalte,
   Betragssuche („119,00"), Zeitraum-Erkennung („juni 2026")
+- 📖 **OCR-Texterkennung**: auch gescannte Belege und Foto-Anhänge
+  (JPG/PNG/HEIC) werden durchsuchbar, Beträge werden erkannt
 - ✅ **Gegenkontrolle**: automatischer Abgleich Beleg ↔ Banktransaktion
 - ☁️ **Optionale Google-Drive-Spiegelung** (unterwegs alle Belege dabei)
 - 🔐 **Login-Schutz**: Passwort beim ersten Start festlegen, Session-Cookie
@@ -131,6 +133,22 @@ Absender, Kategorie **und den Textinhalt der PDFs**:
 
 Der PDF-Text wird beim Sync automatisch erfasst. Belege aus der Zeit davor
 lassen sich nachindexieren: `python -m app.cli index`
+
+### OCR für Scans & Fotos
+
+Gescannte PDFs (ohne echten Text) und Bild-Anhänge (JPG, PNG, HEIC, …)
+werden per **Tesseract-OCR** gelesen – so tauchen auch abfotografierte
+Kassenbons in der Suche auf. Im **Docker-Setup ist OCR bereits enthalten**;
+bei manueller Installation:
+
+```bash
+# Linux:  apt install tesseract-ocr tesseract-ocr-deu
+# macOS:  brew install tesseract tesseract-lang
+```
+
+Ohne Tesseract läuft Kiara normal weiter, nur ohne Texterkennung für Scans
+(Status siehe Seite „Einstellungen"). Sprache per `KIARA_OCR_LANG`
+(Standard `deu+eng`). Bestandsbelege: `python -m app.cli index`.
 
 ## Gegenkontrolle
 

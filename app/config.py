@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # True, wenn Kiara hinter HTTPS läuft (z.B. Caddy/nginx als Reverse-Proxy):
     # Session-Cookies werden dann nur über HTTPS übertragen.
     secure_cookies: bool = False
+    # Sprachen für die Texterkennung (Tesseract), z.B. "deu+eng".
+    ocr_lang: str = "deu+eng"
 
     @property
     def db_path(self) -> Path:
