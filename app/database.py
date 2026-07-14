@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
+from sqlalchemy import event as sa_event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import get_settings
@@ -20,6 +21,16 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
     future=True,
 )
+
+
+@sa_event.listens_for(engine, "connect")
+def _sqlite_pragmas(dbapi_connection, _record) -> None:
+    """WAL-Modus + Warte-Timeout: verhindert 'database is locked' bei
+    gleichzeitigen Zugriffen (z.B. Hintergrund-Sync + Weboberfläche)."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.close()
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
