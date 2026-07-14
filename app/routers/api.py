@@ -18,6 +18,7 @@ from ..schemas import (
 )
 from ..security import encrypt
 from ..services import matching
+from ..services import search as search_service
 from ..services.sync import sync_account, sync_all
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -82,6 +83,26 @@ def sync_all_accounts(db: Session = Depends(get_db)):
 def reconcile(db: Session = Depends(get_db)):
     created = matching.reconcile(db)
     return MessageOut(message=f"{created} Zuordnungen gefunden.")
+
+
+@router.get("/search")
+def search_attachments(q: str, db: Session = Depends(get_db), limit: int = 50):
+    hits = search_service.search(db, q, limit=min(limit, 200))
+    return [
+        {
+            "id": h.attachment.id,
+            "filename": h.attachment.filename,
+            "category": h.attachment.category,
+            "year": h.attachment.year,
+            "month": h.attachment.month,
+            "detected_amount": float(h.attachment.detected_amount)
+            if h.attachment.detected_amount is not None
+            else None,
+            "score": h.score,
+            "snippet": h.snippet,
+        }
+        for h in hits
+    ]
 
 
 @router.get("/attachments", response_model=list[AttachmentOut])

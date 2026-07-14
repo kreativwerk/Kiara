@@ -17,6 +17,9 @@
         <a href="/bank" class="{{ 'active' if request.url.path.startswith('/bank') else '' }}">Gegenkontrolle</a>
         <a href="/settings" class="{{ 'active' if request.url.path.startswith('/settings') else '' }}">Einstellungen</a>
     </nav>
+    <form method="get" action="/search" class="topbar-search">
+        <input type="search" name="q" placeholder="🔍 Suchen … auch Beträge" value="{{ request.query_params.get('q', '') if request.url.path == '/search' else '' }}">
+    </form>
     <form method="post" action="/logout" class="logout-form">
         <button type="submit" class="btn small ghost">Abmelden</button>
     </form>

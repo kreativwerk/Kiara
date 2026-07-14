@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Suche{% endblock %}
+{% block content %}
+<div class="page-head"><h1>🔍 Suche</h1></div>
+
+<section class="card">
+    <form method="get" action="/search" class="search-form">
+        <input type="search" name="q" value="{{ q }}" autofocus
+               placeholder="z.B. „werkstatt juni 2026&#8220;, „rechnng telekom&#8220; oder „119,00&#8220;">
+        <button type="submit" class="btn primary">Suchen</button>
+    </form>
+    <p class="muted small">
+        Die Suche verzeiht Tippfehler, durchsucht auch den <strong>Inhalt</strong> der PDFs
+        und versteht <strong>Beträge</strong> („119,00"), <strong>Jahre</strong> („2026")
+        und <strong>Monate</strong> („juni").
+    </p>
+</section>
+
+{% if q %}
+<section class="card">
+    {% if hits %}
+    <p class="muted small">{{ hits | length }} Treffer für „{{ q }}" – beste zuerst</p>
+    <table class="table">
+        <thead><tr><th>Datei</th><th>Kategorie</th><th>Zeitraum</th><th class="right">Betrag</th><th></th></tr></thead>
+        <tbody>
+        {% for hit in hits %}
+        <tr>
+            <td>
+                {{ hit.attachment.filename }}
+                {% if hit.attachment.subject %}<br><small class="muted">{{ hit.attachment.subject }}</small>{% endif %}
+                {% if hit.snippet %}<br><small class="snippet">{{ hit.snippet }}</small>{% endif %}
+            </td>
+            <td><span class="tag tag-{{ hit.attachment.category }}">{{ hit.attachment.category }}</span></td>
+            <td>{{ hit.attachment.month | monthname }} {{ hit.attachment.year or '' }}</td>
+            <td class="right">{{ hit.attachment.detected_amount | euro }}</td>
+            <td><a class="btn small" href="/attachments/{{ hit.attachment.id }}/download">Download</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Keine Treffer für „{{ q }}".</p>
+    <p class="muted small">
+        Tipps: Weniger oder andere Wörter probieren · Betrag mit Komma schreiben („49,90") ·
+        Zeitraum ergänzen oder weglassen. Hinweis: Der PDF-Inhalt wird seit diesem Update
+        beim Sync erfasst – ältere Belege lassen sich per <code>python -m app.cli index</code> nachindexieren.
+    </p>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

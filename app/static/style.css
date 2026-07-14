@@ -134,13 +134,29 @@ body {
 
 .footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 2rem 1rem; }
 
-.logout-form { margin-left: auto; }
+.topbar-search { margin-left: auto; }
+.topbar-search input {
+    padding: .45rem .7rem; border: 1px solid var(--line); border-radius: 999px;
+    font-size: .88rem; width: 210px; background: var(--bg);
+}
+.topbar-search input:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
+.logout-form { margin-left: 0; }
+
+.search-form { display: flex; gap: .6rem; }
+.search-form input {
+    flex: 1; padding: .7rem .9rem; border: 1px solid var(--line);
+    border-radius: 10px; font-size: 1.05rem;
+}
+.snippet { color: var(--muted); font-style: italic; }
 
 /* Mobil: Tabellen scrollen in ihrer Karte, Topbar bricht sauber um. */
 .card { overflow-x: auto; }
 @media (max-width: 640px) {
     .topbar { flex-wrap: wrap; gap: .6rem 1rem; padding: .7rem 1rem; }
     .topbar nav { gap: .8rem; flex-wrap: wrap; order: 3; width: 100%; }
+    .topbar-search { order: 4; width: 100%; margin-left: 0; }
+    .topbar-search input { width: 100%; }
+    .search-form { flex-direction: column; }
     .container { padding: 0 .75rem; margin-top: 1rem; }
     .page-head { flex-wrap: wrap; gap: .75rem; }
     .cards { gap: .6rem; }

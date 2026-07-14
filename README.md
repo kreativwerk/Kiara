@@ -18,6 +18,8 @@ haben – und welche noch fehlen.
 - 🏷️ **Automatische Kategorisierung** (Rechnung, Beleg, Gutschrift, Mahnung, …)
 - 💶 **Betragserkennung** aus PDF-Rechnungen (pdfplumber)
 - 🏦 **Kontoauszug-Import**: CSV (dt. Banken), CAMT.053, MT940
+- 🔍 **Smarte Suche**: tippfehlertolerant, Volltext über PDF-Inhalte,
+  Betragssuche („119,00"), Zeitraum-Erkennung („juni 2026")
 - ✅ **Gegenkontrolle**: automatischer Abgleich Beleg ↔ Banktransaktion
 - ☁️ **Optionale Google-Drive-Spiegelung** (unterwegs alle Belege dabei)
 - 🔐 **Login-Schutz**: Passwort beim ersten Start festlegen, Session-Cookie
@@ -115,6 +117,20 @@ Presets:
 | WEB.DE   | `imap.web.de`          | 993  |
 | Gmail    | `imap.gmail.com`       | 993  |
 | Outlook  | `outlook.office365.com`| 993  |
+
+## Suche
+
+Das Suchfeld oben rechts (oder `/search`) durchsucht Dateinamen, Betreff,
+Absender, Kategorie **und den Textinhalt der PDFs**:
+
+- **Tippfehler-tolerant**: „rechnng telekom" findet die Telekom-Rechnung
+- **Umlaute egal**: „tuv" findet den TÜV-Bericht
+- **Beträge**: „119,00" oder „119" trifft den erkannten Belegbetrag
+- **Zeiträume**: „2026" filtert aufs Jahr, „juni" auf den Monat –
+  kombinierbar: „werkstatt juni 2026"
+
+Der PDF-Text wird beim Sync automatisch erfasst. Belege aus der Zeit davor
+lassen sich nachindexieren: `python -m app.cli index`
 
 ## Gegenkontrolle
 

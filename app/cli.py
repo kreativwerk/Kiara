@@ -33,6 +33,40 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_index(args: argparse.Namespace) -> int:
+    """Nachindexierung: PDF-Text für Belege ohne Volltext extrahieren."""
+    from sqlalchemy import select
+
+    from .config import get_settings
+    from .models import Attachment
+    from .services.attachments import extract_pdf_text
+    from .services.text_utils import extract_amounts
+
+    init_db()
+    settings = get_settings()
+    indexed = 0
+    skipped = 0
+    with SessionLocal() as db:
+        pending = db.execute(
+            select(Attachment).where(Attachment.text_content.is_(None))
+        ).scalars().all()
+        for att in pending:
+            path = settings.data_dir / att.stored_path
+            text = extract_pdf_text(path) if path.exists() else None
+            if not text:
+                skipped += 1
+                continue
+            att.text_content = text
+            if att.detected_amount is None:
+                amounts = extract_amounts(text)
+                if amounts:
+                    att.detected_amount = max(amounts)
+            indexed += 1
+        db.commit()
+    print(f"{indexed} Belege indexiert, {skipped} übersprungen (kein PDF/kein Text).")
+    return 0
+
+
 def cmd_add_account(args: argparse.Namespace) -> int:
     from .models import EmailAccount
     from .providers import get_provider
@@ -66,6 +100,9 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("sync", help="Alle aktiven Konten synchronisieren").set_defaults(func=cmd_sync)
     sub.add_parser("reconcile", help="Gegenkontrolle neu berechnen").set_defaults(func=cmd_reconcile)
+    sub.add_parser(
+        "index", help="PDF-Volltext für ältere Belege nachindexieren (für die Suche)"
+    ).set_defaults(func=cmd_index)
 
     add = sub.add_parser("add-account", help="Konto anlegen")
     add.add_argument("--name", required=True)

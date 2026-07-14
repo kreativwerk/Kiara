@@ -119,6 +119,7 @@ def sync_account(db: Session, account: EmailAccount, max_fetch: int | None = Non
                                 month=stored.month,
                                 category=stored.category,
                                 detected_amount=stored.detected_amount,
+                                text_content=stored.text_content,
                                 sender_email=msg.sender_email,
                                 subject=msg.subject,
                             )

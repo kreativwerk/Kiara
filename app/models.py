@@ -95,6 +95,8 @@ class Attachment(Base):
     subject: Mapped[str | None] = mapped_column(Text, nullable=True)
     drive_file_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     drive_synced: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # Extrahierter Textinhalt (PDF), Grundlage für die Volltextsuche.
+    text_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     account: Mapped[EmailAccount] = relationship(back_populates="attachments")
