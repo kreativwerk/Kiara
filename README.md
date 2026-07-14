@@ -76,6 +76,20 @@ Schritt für Schritt von null:
 5. Im Browser das App-Passwort festlegen – fertig. Am Handy: Seite öffnen und
    „Zum Home-Bildschirm hinzufügen" → fühlt sich wie eine App an.
 
+### Automatische Updates
+
+Einmalig auf dem Server einrichten, danach spielt sich jede neue offizielle
+Version (Merge auf `main`) binnen ~5 Minuten selbst ein:
+
+```bash
+cd Kiara
+chmod +x scripts/auto-update.sh
+(crontab -l 2>/dev/null; echo "*/5 * * * * /root/Kiara/scripts/auto-update.sh >> /var/log/kiara-update.log 2>&1") | crontab -
+```
+
+Protokoll der Updates: `/var/log/kiara-update.log`. Daten bleiben bei jedem
+Update erhalten. Manuelles Update jederzeit: `git pull && docker compose up -d --build`.
+
 Alle Daten (Datenbank, Belege, Schlüssel) liegen im Docker-Volume
 `kiara-data`. Backup z. B. per
 `docker run --rm -v kiara_kiara-data:/data -v $(pwd):/backup alpine tar czf /backup/kiara-backup.tar.gz /data`.
