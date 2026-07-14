@@ -17,6 +17,29 @@ from .attachments import store_attachment
 
 log = logging.getLogger("kiara.sync")
 
+# Bei Ordner-Angabe "*" (alle Ordner) werden diese ausgelassen:
+JUNK_FOLDER_KEYWORDS = (
+    "spam", "junk", "trash", "papierkorb", "deleted", "gelöscht", "geloescht",
+    "entwürfe", "entwuerfe", "draft", "gesendet", "sent", "outbox",
+)
+
+
+def filter_sync_folders(folders: list[str]) -> list[str]:
+    """Filtert Spam/Papierkorb/Entwürfe/Gesendet aus einer Ordnerliste."""
+    kept = [
+        f for f in folders
+        if not any(keyword in f.lower() for keyword in JUNK_FOLDER_KEYWORDS)
+    ]
+    return kept or ["INBOX"]
+
+
+def _resolve_folders(conn, account: EmailAccount) -> list[str]:
+    """Ordnerliste des Kontos; "*" bedeutet: alle Ordner (ohne Junk)."""
+    wanted = account.folder_list
+    if "*" not in wanted:
+        return wanted
+    return filter_sync_folders(imap_client.list_folders(conn))
+
 
 @dataclass
 class SyncResult:
@@ -65,6 +88,7 @@ def sync_account(db: Session, account: EmailAccount, max_fetch: int | None = Non
         result.ok = False
         result.message = f"Passwort konnte nicht entschlüsselt werden: {exc}"
         account.last_error = result.message
+        account.last_sync_result = result.message
         db.commit()
         return result
 
@@ -74,7 +98,7 @@ def sync_account(db: Session, account: EmailAccount, max_fetch: int | None = Non
         with imap_client.connection(
             account.host, account.port, account.use_ssl, account.username, password
         ) as conn:
-            for folder in account.folder_list:
+            for folder in _resolve_folders(conn, account):
                 since_uid = _last_uid(db, account.id, folder)
                 for msg in imap_client.fetch_messages(conn, folder, since_uid, max_fetch):
                     when = msg.sent_at or datetime.utcnow()
@@ -141,11 +165,12 @@ def sync_account(db: Session, account: EmailAccount, max_fetch: int | None = Non
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         result.ok = False
-        result.message = f"Synchronisierung fehlgeschlagen: {exc}"
+        result.message = f"Synchronisierung fehlgeschlagen: {imap_client.error_text(exc)}"
         result.errors.append(str(exc))
         account.last_error = result.message
         log.exception("Sync für Konto %s fehlgeschlagen", account.name)
     finally:
+        account.last_sync_result = result.message
         db.commit()
     return result
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import email
 import imaplib
 import logging
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -33,6 +34,16 @@ class FetchedMessage:
     sender_email: str | None
     sent_at: datetime | None
     attachments: list[FetchedAttachment] = field(default_factory=list)
+
+
+def error_text(exc: BaseException) -> str:
+    """Lesbare Fehlermeldung: entfernt Python-Bytes-Artefakte wie b'...'."""
+    message = exc.args[0] if getattr(exc, "args", None) else exc
+    if isinstance(message, (bytes, bytearray)):
+        return bytes(message).decode(errors="replace")
+    text = str(message)
+    match = re.fullmatch(r"b'(.*)'", text)
+    return match.group(1) if match else text
 
 
 def _decode(value: str | None) -> str | None:
@@ -91,9 +102,9 @@ def test_connection(
             folders = list_folders(conn)
         return True, f"Verbindung erfolgreich ({len(folders)} Ordner gefunden).", folders
     except imaplib.IMAP4.error as exc:
-        return False, f"IMAP-Fehler: {exc}", []
+        return False, f"IMAP-Fehler: {error_text(exc)}", []
     except Exception as exc:  # noqa: BLE001
-        return False, f"Verbindung fehlgeschlagen: {exc}", []
+        return False, f"Verbindung fehlgeschlagen: {error_text(exc)}", []
 
 
 def _extract_attachments(msg: Message) -> list[FetchedAttachment]:

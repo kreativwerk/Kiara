@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -145,13 +145,41 @@ def test_account(account_id: int, db: Session = Depends(get_db)):
     return _redirect("/accounts", message, error=not ok)
 
 
+def _run_sync_account(account_id: int) -> None:
+    """Hintergrund-Sync für ein Konto (eigene DB-Session)."""
+    from ..database import SessionLocal
+
+    with SessionLocal() as session:
+        account = session.get(EmailAccount, account_id)
+        if account:
+            sync_account(session, account)
+            matching.reconcile(session)
+
+
+def _run_sync_all() -> None:
+    from ..database import SessionLocal
+
+    with SessionLocal() as session:
+        results = sync_all(session)
+        if results:
+            matching.reconcile(session)
+
+
 @router.post("/accounts/{account_id}/sync")
-def sync_one(account_id: int, db: Session = Depends(get_db)):
+def sync_one(
+    account_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     account = db.get(EmailAccount, account_id)
     if not account:
         return _redirect("/accounts", "Konto nicht gefunden.", error=True)
-    result = sync_account(db, account)
-    return _redirect("/accounts", result.message, error=not result.ok)
+    background_tasks.add_task(_run_sync_account, account_id)
+    return _redirect(
+        "/accounts",
+        f"Synchronisierung für '{account.name}' gestartet – läuft im Hintergrund. "
+        "Der Stand erscheint beim Konto, Seite einfach später neu laden.",
+    )
 
 
 @router.post("/accounts/{account_id}/delete")
@@ -163,15 +191,59 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
     return _redirect("/accounts", "Konto gelöscht.")
 
 
+@router.get("/accounts/{account_id}/edit")
+def edit_account_page(account_id: int, request: Request, db: Session = Depends(get_db)):
+    account = db.get(EmailAccount, account_id)
+    if not account:
+        return _redirect("/accounts", "Konto nicht gefunden.", error=True)
+    return templates.TemplateResponse(
+        request,
+        "account_edit.html",
+        {
+            "account": account,
+            "msg": request.query_params.get("msg"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/accounts/{account_id}/edit")
+def update_account(
+    account_id: int,
+    db: Session = Depends(get_db),
+    name: str = Form(...),
+    host: str = Form(...),
+    port: int = Form(993),
+    use_ssl: bool = Form(False),
+    username: str = Form(...),
+    password: str = Form(""),
+    folders: str = Form("INBOX"),
+    active: bool = Form(False),
+):
+    account = db.get(EmailAccount, account_id)
+    if not account:
+        return _redirect("/accounts", "Konto nicht gefunden.", error=True)
+    account.name = name.strip()
+    account.host = host.strip()
+    account.port = port
+    account.use_ssl = bool(use_ssl)
+    account.username = username.strip()
+    account.folders = folders.strip() or "INBOX"
+    account.active = bool(active)
+    if password.strip():
+        account.password_enc = encrypt(password)
+        account.last_error = None
+    db.commit()
+    return _redirect("/accounts", f"Konto '{account.name}' aktualisiert.")
+
+
 @router.post("/sync")
-def sync_everything(db: Session = Depends(get_db)):
-    results = sync_all(db)
-    total_att = sum(r.new_attachments for r in results)
-    total_mail = sum(r.new_emails for r in results)
-    msg = f"Synchronisierung fertig: {total_mail} E-Mails, {total_att} Anhänge."
-    if results:
-        matching.reconcile(db)
-    return _redirect("/", msg)
+def sync_everything(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    background_tasks.add_task(_run_sync_all)
+    return _redirect(
+        "/",
+        "Synchronisierung aller Konten gestartet – läuft im Hintergrund.",
+    )
 
 
 # ---------------------------------------------------------------------------
