@@ -132,6 +132,11 @@ erscheint direkt beim Konto. Große Postfächer werden chronologisch abgearbeite
 – der Sync merkt sich seinen Fortschritt und setzt beim nächsten Lauf fort.
 Konten lassen sich über **Bearbeiten** anpassen (Passwort, Ordner, aktiv/inaktiv).
 
+**Auto-Sync**: Kiara synchronisiert alle aktiven Konten automatisch alle
+30 Minuten (`KIARA_SYNC_INTERVAL_MINUTES`, 0 = aus). Beim Erstimport großer
+Postfächer arbeitet er sich so Runde für Runde selbstständig bis zum Ende
+durch; danach hält er das Archiv ohne Zutun aktuell.
+
 Presets:
 
 | Anbieter | IMAP-Server            | Port |

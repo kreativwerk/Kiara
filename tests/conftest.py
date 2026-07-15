@@ -9,6 +9,7 @@ import tempfile
 _TMP = tempfile.mkdtemp(prefix="kiara-test-")
 os.environ["KIARA_DATA_DIR"] = _TMP
 os.environ["KIARA_SECRET_KEY"] = "A" * 43 + "="  # gültiger 32-Byte Fernet-Key (base64)
+os.environ["KIARA_SYNC_INTERVAL_MINUTES"] = "0"  # kein Auto-Sync in Tests
 
 import pytest  # noqa: E402
 
