@@ -298,6 +298,158 @@ def _parse_mt_booking(value_yymmdd: str, mmdd: str) -> date | None:
 
 
 # ---------------------------------------------------------------------------
+# PDF-Kontoauszüge (heuristischer Zeilen-Parser für deutsche Bank-Layouts)
+# ---------------------------------------------------------------------------
+
+# Zeilenanfang: Buchungsdatum, optional gefolgt vom Wertstellungsdatum.
+_PDF_DATE_START = re.compile(
+    r"^\s*(\d{2}\.\d{2}\.(?:\d{4}|\d{2})?)\s+(?:(\d{2}\.\d{2}\.(?:\d{4}|\d{2})?)\s+)?(.*)$"
+)
+# Zeilenende: Betrag, optional mit Vorzeichen davor/dahinter oder S/H-Kennung.
+_PDF_AMOUNT_END = re.compile(
+    r"(?P<sign_pre>[+-])?\s*(?P<amount>\d{1,3}(?:\.\d{3})*,\d{2})\s*(?P<sign_post>[+-]|[SH])?\s*$"
+)
+_PDF_YEAR = re.compile(r"\b(20\d{2})\b")
+
+# Zeilen mit Datum+Betrag, die KEINE Buchungen sind (Salden, Überträge).
+_PDF_NOISE = (
+    "kontostand", "saldo", "übertrag", "uebertrag", "zwischensumme",
+    "anfangsbestand", "endbestand", "abschluss",
+)
+
+
+def _pdf_extract_text(content: bytes, max_pages: int = 60) -> str | None:
+    """Text aus einer PDF; bei Scans (kein Text) Fallback auf OCR."""
+    text = None
+    try:
+        import io
+
+        import pdfplumber
+
+        parts: list[str] = []
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            for page in pdf.pages[:max_pages]:
+                parts.append(page.extract_text() or "")
+        text = "\n".join(parts).strip() or None
+    except Exception:  # noqa: BLE001
+        text = None
+    if text and len(text) >= 64:
+        return text
+    # Gescannter Auszug: über eine Temp-Datei durch die Texterkennung.
+    try:
+        import tempfile
+        from pathlib import Path
+
+        from . import ocr
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = Path(tmp.name)
+        try:
+            ocr_text = ocr.ocr_pdf(tmp_path, max_pages=10)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+        return ocr_text or text
+    except Exception:  # noqa: BLE001
+        return text
+
+
+def _pdf_parse_date(token: str, fallback_year: int | None) -> date | None:
+    token = token.strip().rstrip(".")
+    parts = token.split(".")
+    if len(parts) == 3 and parts[2]:
+        year = parts[2]
+        if len(year) == 2:
+            year = "20" + year
+        return _parse_date(f"{parts[0]}.{parts[1]}.{year}")
+    if len(parts) >= 2 and fallback_year:
+        return _parse_date(f"{parts[0]}.{parts[1]}.{fallback_year}")
+    return None
+
+
+def _pdf_amount(match: re.Match) -> Decimal | None:
+    amount = parse_amount(match.group("amount"))
+    if amount is None:
+        return None
+    sign_pre = match.group("sign_pre") or ""
+    sign_post = match.group("sign_post") or ""
+    if sign_pre == "-" or sign_post in ("-", "S"):
+        return -abs(amount)
+    return abs(amount)
+
+
+def parse_pdf_text(text: str) -> ParsedStatement:
+    """Parst den Textinhalt eines PDF-Kontoauszugs (zeilenbasiert)."""
+    statement = ParsedStatement(file_format="pdf")
+
+    year_match = _PDF_YEAR.search(text)
+    fallback_year = int(year_match.group(1)) if year_match else None
+
+    current: ParsedTransaction | None = None
+    extra_lines: list[str] = []
+
+    def finalize() -> None:
+        nonlocal current, extra_lines
+        if current is None:
+            return
+        cleaned = [ln for ln in (s.strip() for s in extra_lines) if ln]
+        if cleaned:
+            current.counterparty = current.counterparty or cleaned[0][:200]
+            purpose_parts = [current.purpose] if current.purpose else []
+            purpose_parts.extend(cleaned)
+            current.purpose = " ".join(p for p in purpose_parts if p)[:500] or None
+        statement.transactions.append(current)
+        current = None
+        extra_lines = []
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            continue
+        date_match = _PDF_DATE_START.match(line)
+        amount_match = _PDF_AMOUNT_END.search(line)
+
+        if date_match and amount_match:
+            lower = line.lower()
+            if any(noise in lower for noise in _PDF_NOISE):
+                finalize()
+                continue
+            finalize()
+            booking = _pdf_parse_date(date_match.group(1), fallback_year)
+            value = (
+                _pdf_parse_date(date_match.group(2), fallback_year)
+                if date_match.group(2)
+                else None
+            )
+            amount = _pdf_amount(amount_match)
+            if amount is None or booking is None:
+                continue
+            middle = date_match.group(3)[: amount_match.start() - date_match.start(3)].strip()
+            current = ParsedTransaction(
+                amount=amount,
+                booking_date=booking,
+                value_date=value or booking,
+                purpose=middle or None,
+            )
+        elif current is not None and not date_match:
+            # Folgezeile: Empfänger / Verwendungszweck
+            if len(extra_lines) < 6:
+                extra_lines.append(line)
+        else:
+            finalize()
+
+    finalize()
+    return statement
+
+
+def parse_pdf(content: bytes) -> ParsedStatement:
+    text = _pdf_extract_text(content)
+    if not text:
+        return ParsedStatement(file_format="pdf")
+    return parse_pdf_text(text)
+
+
+# ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
 
@@ -307,6 +459,8 @@ def parse_statement(filename: str, content: bytes) -> ParsedStatement:
     lower = filename.lower()
     head = content[:512].lstrip()
 
+    if lower.endswith(".pdf") or head.startswith(b"%PDF"):
+        return parse_pdf(content)
     if lower.endswith(".xml") or head.startswith(b"<?xml") or b"<Document" in content[:2048]:
         return parse_camt(content)
     if lower.endswith(".sta") or lower.endswith(".mt940") or b":61:" in content[:4096]:

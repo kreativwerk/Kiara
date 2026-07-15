@@ -5,8 +5,8 @@ WEB.DE, Gmail, Outlook), lädt automatisch **alle Anhänge** herunter, sortiert
 sie einsortiert nach **Konto / Jahr / Monat** ins Dateisystem und legt eine
 durchsuchbare Übersicht an – ideal für die Buchhaltung.
 
-Als **Gegenkontrolle** kannst du deinen **Kontoauszug** hochladen (CSV,
-CAMT.053/XML oder MT940). Kiara gleicht die Beträge automatisch mit den
+Als **Gegenkontrolle** kannst du deinen **Kontoauszug** hochladen (PDF,
+CSV, CAMT.053/XML oder MT940). Kiara gleicht die Beträge automatisch mit den
 erkannten Rechnungsbelegen ab und zeigt dir, welche Zahlungen einen Beleg
 haben – und welche noch fehlen.
 
@@ -17,7 +17,7 @@ haben – und welche noch fehlen.
 - 🗂️ Anhänge **dedupliziert** (SHA-256) und **sortiert** abgelegt
 - 🏷️ **Automatische Kategorisierung** (Rechnung, Beleg, Gutschrift, Mahnung, …)
 - 💶 **Betragserkennung** aus PDF-Rechnungen (pdfplumber)
-- 🏦 **Kontoauszug-Import**: CSV (dt. Banken), CAMT.053, MT940
+- 🏦 **Kontoauszug-Import**: PDF (dt. Banken), CSV, CAMT.053, MT940
 - 🔍 **Smarte Suche**: tippfehlertolerant, Volltext über PDF-Inhalte,
   Betragssuche („119,00"), Zeitraum-Erkennung („juni 2026")
 - 📖 **OCR-Texterkennung**: auch gescannte Belege und Foto-Anhänge
