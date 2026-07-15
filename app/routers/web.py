@@ -346,9 +346,15 @@ def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
 
 @router.get("/bank")
 def bank_page(request: Request, db: Session = Depends(get_db)):
+    from datetime import date as _date
+
     statements = db.execute(
-        select(BankStatement).order_by(BankStatement.imported_at.desc())
+        select(BankStatement).order_by(
+            BankStatement.period_year.desc(), BankStatement.period_month.desc()
+        )
     ).scalars().all()
+    today = _date.today()
+    year_options = list(range(today.year, today.year - 8, -1))
 
     transactions = db.execute(
         select(BankTransaction).order_by(BankTransaction.booking_date.desc()).limit(500)
@@ -366,6 +372,8 @@ def bank_page(request: Request, db: Session = Depends(get_db)):
         "bank.html",
         {
             "statements": statements,
+            "year_options": year_options,
+            "current_month": today.month,
             "transactions": transactions,
             "match_by_txn": match_by_txn,
             "total": total,
@@ -381,8 +389,13 @@ def bank_page(request: Request, db: Session = Depends(get_db)):
 async def upload_statement(
     db: Session = Depends(get_db),
     name: str = Form(""),
+    period_month: int = Form(...),
+    period_year: int = Form(...),
     file: UploadFile = Form(...),
 ):
+    if not (1 <= period_month <= 12) or not (2000 <= period_year <= 2100):
+        return _redirect("/bank", "Bitte Monat und Jahr des Auszugs wählen.", error=True)
+
     content = await file.read()
     if not content:
         return _redirect("/bank", "Leere Datei.", error=True)
@@ -400,11 +413,17 @@ async def upload_statement(
     saved_path = settings.statements_dir / Path(filename).name
     saved_path.write_bytes(content)
 
+    month_names = [
+        "", "Januar", "Februar", "März", "April", "Mai", "Juni",
+        "Juli", "August", "September", "Oktober", "November", "Dezember",
+    ]
     statement = BankStatement(
-        name=name.strip() or Path(filename).stem,
+        name=name.strip() or f"Kontoauszug {month_names[period_month]} {period_year}",
         source_filename=filename,
         file_format=parsed.file_format,
         account_iban=parsed.account_iban,
+        period_year=period_year,
+        period_month=period_month,
     )
     db.add(statement)
     db.flush()
@@ -439,10 +458,72 @@ async def upload_statement(
     )
 
 
+@router.post("/bank/statements/{statement_id}/delete")
+def delete_statement(statement_id: int, db: Session = Depends(get_db)):
+    statement = db.get(BankStatement, statement_id)
+    if not statement:
+        return _redirect("/bank", "Auszug nicht gefunden.", error=True)
+    name = statement.name
+    db.delete(statement)  # löscht Transaktionen + Zuordnungen mit (Cascade)
+    db.commit()
+    return _redirect("/bank", f"Auszug '{name}' samt Transaktionen gelöscht.")
+
+
 @router.post("/bank/reconcile")
 def run_reconcile(db: Session = Depends(get_db)):
     created = matching.reconcile(db)
     return _redirect("/bank", f"Gegenkontrolle aktualisiert: {created} Zuordnungen gefunden.")
+
+
+@router.get("/bank/assign/{txn_id}")
+def assign_page(
+    txn_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+):
+    txn = db.get(BankTransaction, txn_id)
+    if not txn:
+        return _redirect("/bank", "Transaktion nicht gefunden.", error=True)
+
+    q = q.strip()
+    if q:
+        candidates = [hit.attachment for hit in search_service.search(db, q, limit=25)]
+    else:
+        candidates = matching.suggestions(db, txn)
+
+    return templates.TemplateResponse(
+        request,
+        "bank_assign.html",
+        {
+            "txn": txn,
+            "candidates": candidates,
+            "q": q,
+            "msg": request.query_params.get("msg"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/bank/assign/{txn_id}/{attachment_id}")
+def assign_attachment(txn_id: int, attachment_id: int, db: Session = Depends(get_db)):
+    txn = db.get(BankTransaction, txn_id)
+    attachment = db.get(Attachment, attachment_id)
+    if not txn or not attachment:
+        return _redirect("/bank", "Transaktion oder Beleg nicht gefunden.", error=True)
+    # Bestehende Zuordnung dieser Transaktion ersetzen.
+    db.query(Match).filter(Match.transaction_id == txn_id).delete(synchronize_session=False)
+    db.add(
+        Match(
+            transaction_id=txn_id,
+            attachment_id=attachment_id,
+            score=1.0,
+            method="manuell",
+            confirmed=True,
+        )
+    )
+    db.commit()
+    return _redirect("/bank", f"Beleg '{attachment.filename}' manuell zugeordnet.")
 
 
 @router.post("/matches/{match_id}/confirm")

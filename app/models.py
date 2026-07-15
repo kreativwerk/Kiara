@@ -115,6 +115,9 @@ class BankStatement(Base):
     source_filename: Mapped[str] = mapped_column(String(500))
     file_format: Mapped[str] = mapped_column(String(20))
     account_iban: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Zeitraum des Auszugs (Pflichtauswahl beim Hochladen).
+    period_year: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    period_month: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     imported_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     transactions: Mapped[list["BankTransaction"]] = relationship(

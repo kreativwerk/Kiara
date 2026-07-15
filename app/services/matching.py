@@ -1,6 +1,14 @@
-"""Gegenkontrolle: Belege (Anhänge) automatisch Banktransaktionen zuordnen."""
+"""Gegenkontrolle: Belege (Anhänge) automatisch Banktransaktionen zuordnen.
+
+Grundregel: Der **Betrag allein reicht nie** für eine automatische Zuordnung.
+Zusätzlich muss ein Identitäts-Beweis vorliegen – der Zahlungsempfänger oder
+eine Referenz-/Rechnungsnummer aus dem Verwendungszweck muss im Beleg
+(Dateiname, Betreff, Absender oder PDF-Volltext) wiederzufinden sein. Das
+verhindert Fehlzuordnungen bei häufigen Beträgen.
+"""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -13,6 +21,22 @@ from ..models import Attachment, BankTransaction, Match
 DEFAULT_DATE_WINDOW = 60  # Tage: ein Beleg darf so lange vor der Zahlung liegen
 DEFAULT_AMOUNT_TOLERANCE = Decimal("0.01")
 SCORE_THRESHOLD = 0.6
+
+AMOUNT_SCORE = 0.5       # Betrag stimmt (notwendige Bedingung)
+NAME_SCORE = 0.25        # Empfängername im Beleg gefunden
+REFERENCE_SCORE = 0.35   # Referenz-/Rechnungsnummer im Beleg gefunden
+IDENTITY_CAP = 0.4       # Name + Referenz zusammen gedeckelt
+DATE_SCORE_MAX = 0.25    # Bonus für zeitliche Nähe
+
+# Referenz-Kandidaten aus dem Verwendungszweck: mind. 6 Zeichen, mind. 1 Ziffer.
+_REF_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9./-]{5,}")
+
+# Häufige Wörter, die als "Name" nichts beweisen.
+_NAME_STOPWORDS = {
+    "gmbh", "gmbh.", "ag", "kg", "ohg", "ug", "e.k.", "co.", "und", "the",
+    "sepa", "lastschrift", "überweisung", "ueberweisung", "gutschrift",
+    "basislastschrift", "dauerauftrag", "kartenzahlung", "entgelt",
+}
 
 
 @dataclass
@@ -28,14 +52,52 @@ def _attachment_date(att: Attachment) -> date | None:
     return None
 
 
-def _name_bonus(txn: BankTransaction, att: Attachment) -> float:
+def _haystack(att: Attachment) -> str:
+    parts = [att.sender_email or "", att.subject or "", att.filename or ""]
+    if att.text_content:
+        parts.append(att.text_content)
+    return " ".join(parts).lower()
+
+
+def _name_bonus(txn: BankTransaction, haystack: str) -> float:
     counterparty = (txn.counterparty or "").lower()
     if not counterparty:
         return 0.0
-    haystack = f"{att.sender_email or ''} {att.subject or ''} {att.filename}".lower()
-    tokens = [t for t in counterparty.replace(".", " ").split() if len(t) >= 4]
+    tokens = [
+        t for t in re.split(r"[^a-zäöüß0-9]+", counterparty)
+        if len(t) >= 4 and t not in _NAME_STOPWORDS
+    ]
     if tokens and any(token in haystack for token in tokens):
-        return 0.1
+        return NAME_SCORE
+    return 0.0
+
+
+def _reference_bonus(txn: BankTransaction, att: Attachment) -> float:
+    """Referenz-/Rechnungsnummern aus dem Verwendungszweck im Beleg suchen."""
+    if not att.text_content:
+        return 0.0
+    text = att.text_content.lower()
+    source = f"{txn.purpose or ''} {txn.reference or ''}".lower()
+    for token in _REF_TOKEN.findall(source):
+        if not any(ch.isdigit() for ch in token):
+            continue
+        # Reine Datums-/Betragsfragmente überspringen
+        if re.fullmatch(r"\d{1,2}\.\d{1,2}\.\d{2,4}", token):
+            continue
+        if token in text:
+            return REFERENCE_SCORE
+    return 0.0
+
+
+def _date_bonus(txn: BankTransaction, att: Attachment, date_window: int) -> float:
+    att_date = _attachment_date(att)
+    if not att_date or not txn.booking_date:
+        return 0.0
+    delta = (txn.booking_date - att_date).days
+    if 0 <= delta <= date_window:
+        return DATE_SCORE_MAX * (1 - delta / date_window)
+    if -5 <= delta < 0:
+        return DATE_SCORE_MAX / 2  # Beleg leicht nach Buchung (Toleranz)
     return 0.0
 
 
@@ -50,17 +112,15 @@ def _score(
     if abs(Decimal(att.detected_amount) - abs(Decimal(txn.amount))) > tolerance:
         return 0.0
 
-    score = 0.6  # Betrag stimmt überein
+    identity = min(
+        IDENTITY_CAP,
+        _name_bonus(txn, _haystack(att)) + _reference_bonus(txn, att),
+    )
+    if identity == 0.0:
+        # Betrag allein beweist nichts -> keine automatische Zuordnung.
+        return 0.0
 
-    att_date = _attachment_date(att)
-    if att_date and txn.booking_date:
-        delta = (txn.booking_date - att_date).days
-        if 0 <= delta <= date_window:
-            score += 0.3 * (1 - delta / date_window)
-        elif -5 <= delta < 0:
-            score += 0.15  # Beleg leicht nach Buchung (Toleranz)
-
-    score += _name_bonus(txn, att)
+    score = AMOUNT_SCORE + identity + _date_bonus(txn, att, date_window)
     return round(min(score, 1.0), 3)
 
 
@@ -117,3 +177,33 @@ def reconcile(
         created += 1
     db.commit()
     return created
+
+
+def suggestions(
+    db: Session,
+    txn: BankTransaction,
+    *,
+    tolerance: Decimal = Decimal("0.50"),
+    limit: int = 15,
+) -> list[Attachment]:
+    """Kandidaten für die manuelle Zuordnung: passender Betrag, Datum in der Nähe."""
+    target = abs(Decimal(txn.amount))
+    attachments = db.execute(
+        select(Attachment).where(Attachment.detected_amount.is_not(None))
+    ).scalars().all()
+
+    def sort_key(att: Attachment):
+        amount_delta = abs(Decimal(att.detected_amount) - target)
+        att_date = _attachment_date(att)
+        if att_date and txn.booking_date:
+            date_delta = abs((txn.booking_date - att_date).days)
+        else:
+            date_delta = 9999
+        return (amount_delta, date_delta)
+
+    close = [
+        att for att in attachments
+        if abs(Decimal(att.detected_amount) - target) <= tolerance
+    ]
+    close.sort(key=sort_key)
+    return close[:limit]

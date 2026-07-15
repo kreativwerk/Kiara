@@ -12,8 +12,22 @@
     <section class="card">
         <h2>Kontoauszug hochladen</h2>
         <form method="post" action="/bank/upload" enctype="multipart/form-data" class="form-grid">
+            <label>Monat des Auszugs
+                <select name="period_month" required>
+                    {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {{ 'selected' if m == current_month else '' }}>{{ m | monthname }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Jahr
+                <select name="period_year" required>
+                    {% for y in year_options %}
+                    <option value="{{ y }}">{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </label>
             <label>Bezeichnung (optional)
-                <input type="text" name="name" placeholder="z.B. Geschäftskonto Juni 2026">
+                <input type="text" name="name" placeholder="z.B. Geschäftskonto">
             </label>
             <label>Datei (PDF, CSV, CAMT.053/XML oder MT940)
                 <input type="file" name="file" required>
@@ -36,8 +50,21 @@
         <h3>Importierte Auszüge</h3>
         <ul class="account-list">
             {% for s in statements %}
-            <li><span>{{ s.name }} <small class="muted">({{ s.file_format | upper }})</small></span>
-                <span class="badge">{{ s.transactions | length }} Buchungen</span></li>
+            <li>
+                <span>{{ s.name }}
+                    <small class="muted">
+                        {% if s.period_month %}· {{ s.period_month | monthname }} {{ s.period_year }}{% endif %}
+                        ({{ s.file_format | upper }})
+                    </small>
+                </span>
+                <span class="actions">
+                    <span class="badge">{{ s.transactions | length }} Buchungen</span>
+                    <form method="post" action="/bank/statements/{{ s.id }}/delete"
+                          onsubmit="return confirm('Auszug {{ s.name }} samt allen Transaktionen und Zuordnungen löschen?');">
+                        <button class="btn small danger">Löschen</button>
+                    </form>
+                </span>
+            </li>
             {% endfor %}
         </ul>
         {% endif %}
@@ -73,10 +100,13 @@
             </td>
             <td class="actions">
                 {% if m and not m.confirmed %}
-                <form method="post" action="/matches/{{ m.id }}/confirm"><button class="btn small primary">✓</button></form>
-                <form method="post" action="/matches/{{ m.id }}/delete"><button class="btn small danger">✕</button></form>
+                <form method="post" action="/matches/{{ m.id }}/confirm"><button class="btn small primary" title="Zuordnung bestätigen">✓</button></form>
+                <form method="post" action="/matches/{{ m.id }}/delete"><button class="btn small danger" title="Zuordnung entfernen">✕</button></form>
+                <a class="btn small" href="/bank/assign/{{ t.id }}" title="Anderen Beleg wählen">ändern</a>
                 {% elif m and m.confirmed %}
                 <form method="post" action="/matches/{{ m.id }}/delete"><button class="btn small">lösen</button></form>
+                {% else %}
+                <a class="btn small" href="/bank/assign/{{ t.id }}">Beleg zuordnen</a>
                 {% endif %}
             </td>
         </tr>
