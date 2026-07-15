@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Beleg zuordnen{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>Beleg zuordnen</h1>
+    <a href="/bank" class="btn ghost">← Zurück zur Gegenkontrolle</a>
+</div>
+
+<section class="card">
+    <h2>Zahlung</h2>
+    <table class="table">
+        <tbody>
+            <tr>
+                <td>{{ txn.booking_date | datefmt }}</td>
+                <td><strong>{{ txn.counterparty or '–' }}</strong><br>
+                    <small class="muted">{{ (txn.purpose or '')[:140] }}</small></td>
+                <td class="right {{ 'neg' if txn.amount < 0 else 'pos' }}">{{ txn.amount | euro }}</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+
+<section class="card">
+    <h2>Passenden Beleg wählen</h2>
+    <form method="get" action="/bank/assign/{{ txn.id }}" class="search-form">
+        <input type="search" name="q" value="{{ q }}"
+               placeholder="Belege durchsuchen (z.B. Empfänger, Rechnungsnummer, Betrag)">
+        <button type="submit" class="btn">Suchen</button>
+    </form>
+    <p class="muted small">
+        {% if q %}Suchergebnisse für „{{ q }}"{% else %}Vorschläge mit ähnlichem Betrag (± 0,50 €), zeitlich nächste zuerst{% endif %}
+    </p>
+
+    {% if candidates %}
+    <table class="table">
+        <thead><tr><th>Datei</th><th>Kategorie</th><th>Zeitraum</th><th class="right">Betrag</th><th></th></tr></thead>
+        <tbody>
+        {% for att in candidates %}
+        <tr>
+            <td>{{ att.filename }}
+                {% if att.subject %}<br><small class="muted">{{ att.subject }}</small>{% endif %}</td>
+            <td><span class="tag tag-{{ att.category }}">{{ att.category }}</span></td>
+            <td>{{ att.month | monthname }} {{ att.year or '' }}</td>
+            <td class="right">{{ att.detected_amount | euro }}</td>
+            <td class="actions">
+                <a class="btn small" href="/attachments/{{ att.id }}/download" target="_blank">Ansehen</a>
+                <form method="post" action="/bank/assign/{{ txn.id }}/{{ att.id }}">
+                    <button class="btn small primary">Zuordnen</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Keine passenden Belege gefunden – probiere die Suche oben
+        (z.B. nach dem Empfängernamen oder der Rechnungsnummer).</p>
+    {% endif %}
+</section>
+{% endblock %}
