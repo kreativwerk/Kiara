@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     secure_cookies: bool = False
     # Sprachen für die Texterkennung (Tesseract), z.B. "deu+eng".
     ocr_lang: str = "deu+eng"
+    # Automatischer Sync aller aktiven Konten alle N Minuten (0 = aus).
+    sync_interval_minutes: int = 30
 
     @property
     def db_path(self) -> Path:

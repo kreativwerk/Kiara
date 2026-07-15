@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, RedirectResponse
 
-from . import __version__, auth
+from . import __version__, auth, autosync
 from .database import SessionLocal, init_db
 from .routers import api, web
 from .routers import auth as auth_routes
@@ -48,7 +49,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    stop_autosync = threading.Event()
+    autosync.start(stop_autosync)
     yield
+    stop_autosync.set()
 
 
 app = FastAPI(title="Kiara – Belegarchiv", version=__version__, lifespan=lifespan)
