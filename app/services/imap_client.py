@@ -1,6 +1,7 @@
 """IMAP-Anbindung: Verbindung testen und neue Nachrichten samt Anhängen abrufen."""
 from __future__ import annotations
 
+import base64
 import email
 import imaplib
 import logging
@@ -36,6 +37,60 @@ class FetchedMessage:
     attachments: list[FetchedAttachment] = field(default_factory=list)
 
 
+def decode_modified_utf7(value: str) -> str:
+    """IMAP-Ordnernamen dekodieren: 'Entw&APw-rfe' -> 'Entwürfe'."""
+    result: list[str] = []
+    i = 0
+    while i < len(value):
+        char = value[i]
+        if char != "&":
+            result.append(char)
+            i += 1
+            continue
+        end = value.find("-", i)
+        if end == -1:
+            result.append(value[i:])
+            break
+        chunk = value[i + 1:end]
+        if not chunk:
+            result.append("&")
+        else:
+            b64 = chunk.replace(",", "/")
+            b64 += "=" * ((4 - len(b64) % 4) % 4)
+            try:
+                result.append(base64.b64decode(b64).decode("utf-16-be"))
+            except Exception:
+                result.append(value[i:end + 1])
+        i = end + 1
+    return "".join(result)
+
+
+def encode_modified_utf7(value: str) -> str:
+    """Lesbaren Ordnernamen für IMAP kodieren: 'Entwürfe' -> 'Entw&APw-rfe'."""
+    result: list[str] = []
+    buffer: list[str] = []
+
+    def flush() -> None:
+        if buffer:
+            b64 = (
+                base64.b64encode("".join(buffer).encode("utf-16-be"))
+                .decode()
+                .rstrip("=")
+                .replace("/", ",")
+            )
+            result.append(f"&{b64}-")
+            buffer.clear()
+
+    for char in value:
+        if 0x20 <= ord(char) <= 0x7E:
+            flush()
+            result.append("&-" if char == "&" else char)
+        else:
+            buffer.append(char)
+    flush()
+    return "".join(result)
+
+
 def error_text(exc: BaseException) -> str:
     """Lesbare Fehlermeldung: entfernt Python-Bytes-Artefakte wie b'...'."""
     message = exc.args[0] if getattr(exc, "args", None) else exc
@@ -44,6 +99,46 @@ def error_text(exc: BaseException) -> str:
     text = str(message)
     match = re.fullmatch(r"b'(.*)'", text)
     return match.group(1) if match else text
+
+
+def friendly_error(exc: BaseException) -> str:
+    """Verständliche deutsche Fehlermeldung ohne Technik-Kauderwelsch.
+
+    Die technischen Details landen im Server-Protokoll (Aufrufer loggt),
+    der Nutzer bekommt eine Erklärung mit Handlungstipp.
+    """
+    raw = error_text(exc).lower()
+    if any(k in raw for k in ("authentication", "login", "credential", "password", "anmeld")):
+        return (
+            "Anmeldung fehlgeschlagen – der Mailserver hat Benutzername oder "
+            "Passwort abgelehnt. Tipp: das Postfach-Passwort verwenden (nicht das "
+            "Kundenkonto-Passwort). Bei GMX zuerst IMAP in den Einstellungen "
+            "erlauben; bei Zwei-Faktor-Anmeldung ein App-Passwort erstellen."
+        )
+    if "timed out" in raw or "timeout" in raw:
+        return (
+            "Der Mailserver hat nicht rechtzeitig geantwortet. "
+            "Bitte in ein paar Minuten erneut versuchen."
+        )
+    if "ssl" in raw or "certificate" in raw or "tls" in raw:
+        return (
+            "Die sichere Verbindung kam nicht zustande. Bitte prüfen: "
+            "SSL/TLS-Häkchen gesetzt und Port 993 eingetragen?"
+        )
+    if any(k in raw for k in ("getaddrinfo", "name or service", "nodename", "not known")):
+        return (
+            "Der Mailserver wurde nicht gefunden. "
+            "Bitte die IMAP-Server-Adresse auf Tippfehler prüfen."
+        )
+    if "examine" in raw or "select" in raw:
+        return (
+            "Ein Postfach-Ordner konnte nicht geöffnet werden und wurde übersprungen. "
+            "Die übrigen Ordner wurden normal verarbeitet."
+        )
+    return (
+        "Die Synchronisierung ist an einer unerwarteten Server-Antwort gescheitert. "
+        "Die technischen Details stehen im Protokoll – einfach erneut versuchen."
+    )
 
 
 def _decode(value: str | None) -> str | None:
@@ -76,21 +171,73 @@ def connection(host: str, port: int, use_ssl: bool, username: str, password: str
             pass
 
 
-def list_folders(conn) -> list[str]:
+@dataclass
+class Folder:
+    raw: str         # Name wie vom Server geliefert (für SELECT verwenden)
+    display: str     # lesbarer Name (UTF-7 dekodiert), für Anzeige/Filter
+    attributes: str  # z.B. "\\HasNoChildren \\Drafts"
+
+    @property
+    def selectable(self) -> bool:
+        return "\\noselect" not in self.attributes.lower()
+
+    @property
+    def special_junk(self) -> bool:
+        """Vom Server als Entwürfe/Gesendet/Spam/Papierkorb markiert."""
+        attrs = self.attributes.lower()
+        return any(
+            flag in attrs
+            for flag in ("\\drafts", "\\sent", "\\junk", "\\trash", "\\all", "\\flagged")
+        )
+
+
+# LIST-Antwort: (Attribute) "Trenner" Name  – Name in Anführungszeichen oder als Atom
+_LIST_LINE = re.compile(
+    r'^\((?P<attrs>[^)]*)\)\s+(?:"(?:[^"\\]|\\.)*"|NIL)\s+(?P<name>.+)$'
+)
+
+
+def _unquote(name: str) -> str:
+    name = name.strip()
+    if name.startswith('"') and name.endswith('"') and len(name) >= 2:
+        return name[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+    return name
+
+
+def list_folders(conn) -> list[Folder]:
     typ, data = conn.list()
-    folders: list[str] = []
+    folders: list[Folder] = []
     if typ != "OK" or not data:
         return folders
     for raw in data:
         if not raw:
             continue
-        line = raw.decode(errors="replace") if isinstance(raw, bytes) else str(raw)
-        # Format: (\HasNoChildren) "/" "INBOX"
-        parts = line.split(' "')
-        name = parts[-1].strip().strip('"')
-        if name:
-            folders.append(name)
+        if isinstance(raw, tuple):
+            # Literal-Form: Name kommt separat als Bytes
+            prefix = raw[0].decode(errors="replace") if isinstance(raw[0], bytes) else str(raw[0])
+            name = raw[1].decode(errors="replace") if isinstance(raw[1], bytes) else str(raw[1])
+            attrs_match = re.search(r"\(([^)]*)\)", prefix)
+            attrs = attrs_match.group(1) if attrs_match else ""
+        else:
+            line = raw.decode(errors="replace") if isinstance(raw, bytes) else str(raw)
+            match = _LIST_LINE.match(line.strip())
+            if not match:
+                log.warning("Ordner-Zeile nicht erkannt: %r", line)
+                continue
+            attrs = match.group("attrs")
+            name = _unquote(match.group("name"))
+        if not name:
+            continue
+        folders.append(Folder(raw=name, display=decode_modified_utf7(name), attributes=attrs))
     return folders
+
+
+def _select_name(folder: str) -> str:
+    """Ordnernamen sicher für SELECT quoten (inkl. Umlaut-Kodierung)."""
+    if any(ord(ch) > 0x7E for ch in folder):
+        folder = encode_modified_utf7(folder)
+    escaped = folder.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def test_connection(
@@ -101,10 +248,9 @@ def test_connection(
         with connection(host, port, use_ssl, username, password) as conn:
             folders = list_folders(conn)
         return True, f"Verbindung erfolgreich ({len(folders)} Ordner gefunden).", folders
-    except imaplib.IMAP4.error as exc:
-        return False, f"IMAP-Fehler: {error_text(exc)}", []
     except Exception as exc:  # noqa: BLE001
-        return False, f"Verbindung fehlgeschlagen: {error_text(exc)}", []
+        log.warning("Verbindungstest fehlgeschlagen (%s): %s", host, error_text(exc))
+        return False, friendly_error(exc), []
 
 
 def _extract_attachments(msg: Message) -> list[FetchedAttachment]:
@@ -161,8 +307,16 @@ def fetch_messages(
     since_uid: int = 0,
     limit: int = 0,
 ) -> Iterator[FetchedMessage]:
-    """Iteriert über Nachrichten in ``folder`` mit UID größer als ``since_uid``."""
-    typ, _ = conn.select(f'"{folder}"', readonly=True)
+    """Iteriert über Nachrichten in ``folder`` mit UID größer als ``since_uid``.
+
+    Ein Ordner, der sich nicht öffnen lässt, wird übersprungen und bricht
+    den Sync nicht ab.
+    """
+    try:
+        typ, _ = conn.select(_select_name(folder), readonly=True)
+    except imaplib.IMAP4.error as exc:
+        log.warning("Ordner übersprungen (%s): %s", folder, error_text(exc))
+        return
     if typ != "OK":
         log.warning("Ordner konnte nicht geöffnet werden: %s", folder)
         return

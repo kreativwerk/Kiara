@@ -36,11 +36,24 @@ def filter_sync_folders(folders: list[str]) -> list[str]:
 
 
 def _resolve_folders(conn, account: EmailAccount) -> list[str]:
-    """Ordnerliste des Kontos; "*" bedeutet: alle Ordner (ohne Junk)."""
+    """Ordnerliste des Kontos; "*" bedeutet: alle Ordner (ohne Junk).
+
+    Junk wird doppelt erkannt: über Server-Markierungen (\\Drafts, \\Sent,
+    \\Junk, \\Trash, ...) und über Namens-Stichwörter (dekodiert, damit
+    auch "Entwürfe" in IMAP-UTF-7-Schreibweise erkannt wird).
+    """
     wanted = account.folder_list
     if "*" not in wanted:
         return wanted
-    return filter_sync_folders(imap_client.list_folders(conn))
+    kept: list[str] = []
+    for folder in imap_client.list_folders(conn):
+        if not folder.selectable or folder.special_junk:
+            continue
+        display = folder.display.lower()
+        if any(keyword in display for keyword in JUNK_FOLDER_KEYWORDS):
+            continue
+        kept.append(folder.raw)
+    return kept or ["INBOX"]
 
 
 @dataclass
@@ -213,7 +226,7 @@ def _do_sync(db: Session, account: EmailAccount, max_fetch: int | None = None) -
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         result.ok = False
-        result.message = f"Synchronisierung fehlgeschlagen: {imap_client.error_text(exc)}"
+        result.message = imap_client.friendly_error(exc)
         result.errors.append(str(exc))
         account.last_error = result.message
         log.exception("Sync für Konto %s fehlgeschlagen", account.name)
