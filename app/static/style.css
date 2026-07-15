@@ -93,6 +93,7 @@ body.app { display: flex; min-height: 100vh; }
     transition: background .15s, color .15s;
 }
 .side-nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
+.nav-short { display: none; }
 .side-nav a:hover { color: var(--shell-ink-strong); background: var(--shell-2); }
 .side-nav a.active {
     color: var(--shell-ink-strong);
@@ -309,33 +310,49 @@ body.anon .container { display: grid; place-items: center; min-height: 72vh; }
 
 @media (max-width: 860px) {
     body.app { flex-direction: column; }
+
+    /* Oben: schmale Leiste mit Marke + Abmelden */
     .sidebar {
         width: 100%; height: auto; position: static;
-        flex-direction: row; align-items: center; flex-wrap: wrap;
-        gap: .3rem .5rem; padding: .7rem .9rem;
+        flex-direction: row; align-items: center;
+        gap: .5rem; padding: .6rem .95rem;
     }
-    .brand { padding: 0 .4rem 0 0; font-size: 1.1rem; }
+    .brand { padding: 0; font-size: 1.1rem; }
     .nav-label { display: none; }
+    .sidebar-foot { margin: 0 0 0 auto; border: none; padding: 0; }
+    .logout-btn { padding: .45rem .6rem; }
+    .logout-btn svg { width: 17px; height: 17px; }
+    .logout-btn .nav-text { font-size: .85rem; }
+
+    /* Unten: feste Tab-Leiste mit Symbol + Bezeichnung (wie eine App) */
     .side-nav {
-        flex-direction: row; flex-wrap: nowrap; overflow-x: auto;
-        gap: .2rem; flex: 1; min-width: 0; -webkit-overflow-scrolling: touch;
+        position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+        flex-direction: row; justify-content: space-around; gap: .1rem;
+        background: var(--shell);
+        border-top: 1px solid var(--shell-line);
+        padding: .4rem .35rem calc(.45rem + env(safe-area-inset-bottom, 0px));
+        box-shadow: 0 -6px 18px rgba(10, 25, 19, .28);
     }
-    .side-nav a { padding: .55rem .65rem; font-size: .86rem; white-space: nowrap; }
-    /* Mobil: nur Symbole, damit alle Punkte sichtbar sind (Beschriftung im aktiven Punkt) */
-    .side-nav a .nav-text { display: none; }
-    .side-nav a.active .nav-text { display: inline; }
-    .side-nav a svg { width: 20px; height: 20px; }
-    .brand-name { display: none; }
-    .logout-btn .nav-text { display: none; }
-    .sidebar-foot { margin: 0; border: none; padding: 0; }
-    .logout-btn { padding: .45rem .55rem; }
-    .logout-btn svg { width: 16px; height: 16px; }
+    .side-nav a {
+        flex: 1; min-width: 0;
+        flex-direction: column; align-items: center; gap: .22rem;
+        padding: .35rem .2rem; border-radius: 12px;
+        font-size: .64rem; font-weight: 600; letter-spacing: .01em;
+        text-align: center; white-space: nowrap;
+    }
+    .side-nav a .nav-text { display: inline; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .side-nav a .nav-long { display: none; }
+    .side-nav a .nav-short { display: inline; }
+    .side-nav a svg { width: 21px; height: 21px; }
+    .side-nav a.active { background: var(--shell-2); box-shadow: none; color: var(--shell-ink-strong); }
 
     .content { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
     .content-head { padding: .9rem 1rem 0; }
     .topbar-search { width: 100%; }
     .topbar-search input { width: 100%; }
-    .container { padding: .8rem 1rem 1.5rem; }
+    /* Platz für die Tab-Leiste unten freihalten */
+    .container { padding: .8rem 1rem calc(6rem + env(safe-area-inset-bottom, 0px)); }
+    .footer { display: none; }
     .page-head h1 { font-size: 1.3rem; }
     .cards { gap: .6rem; }
     .card.stat { min-width: 104px; padding: .8rem .9rem; }
