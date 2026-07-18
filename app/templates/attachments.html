@@ -4,6 +4,36 @@
 <div class="page-head"><h1>Belege &amp; Anhänge</h1></div>
 
 <section class="card">
+    <h2>Belege hochladen</h2>
+    <form method="post" action="/attachments/upload" enctype="multipart/form-data" class="form-grid">
+        <label>Monat des Belegs
+            <select name="period_month">
+                {% for m in range(1, 13) %}
+                <option value="{{ m }}" {{ 'selected' if m == current_month else '' }}>{{ m | monthname }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Jahr
+            <select name="period_year">
+                {% for y in year_options %}
+                <option value="{{ y }}">{{ y }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Dateien (mehrere möglich)
+            <input type="file" name="files" multiple required>
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="btn primary">Hochladen</button>
+        </div>
+    </form>
+    <p class="muted small">
+        PDF, Fotos (JPG/HEIC) und Scans – Text, Betrag und Kategorie werden automatisch
+        erkannt (inkl. Texterkennung) und der Abgleich mit dem Kontoauszug läuft direkt mit.
+    </p>
+</section>
+
+<section class="card">
     <form method="get" action="/attachments" class="filter-bar">
         <select name="account_id">
             <option value="">Alle Konten</option>

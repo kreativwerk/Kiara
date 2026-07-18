@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -60,7 +60,11 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         select(Attachment).order_by(Attachment.created_at.desc()).limit(10)
     ).scalars().all()
 
-    accounts = db.execute(select(EmailAccount).order_by(EmailAccount.name)).scalars().all()
+    accounts = db.execute(
+        select(EmailAccount)
+        .where(EmailAccount.provider != "manuell")
+        .order_by(EmailAccount.name)
+    ).scalars().all()
 
     return templates.TemplateResponse(
         request,
@@ -88,7 +92,11 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/accounts")
 def accounts_page(request: Request, db: Session = Depends(get_db)):
-    accounts = db.execute(select(EmailAccount).order_by(EmailAccount.name)).scalars().all()
+    accounts = db.execute(
+        select(EmailAccount)
+        .where(EmailAccount.provider != "manuell")
+        .order_by(EmailAccount.name)
+    ).scalars().all()
     return templates.TemplateResponse(
         request,
         "accounts.html",
@@ -249,6 +257,102 @@ def sync_everything(background_tasks: BackgroundTasks, db: Session = Depends(get
 
 
 # ---------------------------------------------------------------------------
+# Manueller Beleg-Upload
+# ---------------------------------------------------------------------------
+
+MANUAL_ACCOUNT_NAME = "Manuelle Uploads"
+
+
+def _manual_account(db: Session) -> EmailAccount:
+    """Virtuelles Konto, unter dem hochgeladene Belege einsortiert werden."""
+    account = db.execute(
+        select(EmailAccount).where(EmailAccount.provider == "manuell")
+    ).scalar_one_or_none()
+    if account is None:
+        account = EmailAccount(
+            name=MANUAL_ACCOUNT_NAME,
+            provider="manuell",
+            host="-",
+            port=0,
+            use_ssl=False,
+            username="-",
+            password_enc=encrypt(""),
+            folders="",
+            active=False,  # wird nie synchronisiert
+        )
+        db.add(account)
+        db.commit()
+    return account
+
+
+@router.post("/attachments/upload")
+async def upload_attachments(
+    db: Session = Depends(get_db),
+    period_month: int = Form(0),
+    period_year: int = Form(0),
+    files: list[UploadFile] = File(...),
+):
+    from datetime import datetime as _dt
+
+    from ..models import Attachment as AttachmentModel
+    from ..services.attachments import store_attachment
+
+    account = _manual_account(db)
+    if 1 <= period_month <= 12 and 2000 <= period_year <= 2100:
+        when = _dt(period_year, period_month, 15)
+    else:
+        when = _dt.utcnow()
+
+    known_hashes = set(
+        db.execute(
+            select(AttachmentModel.sha256).where(AttachmentModel.account_id == account.id)
+        ).scalars()
+    )
+
+    saved = 0
+    duplicates = 0
+    for upload in files:
+        content = await upload.read()
+        if not content:
+            continue
+        filename = upload.filename or "beleg.pdf"
+        stored = store_attachment(
+            account_name=account.name,
+            filename=filename,
+            content=content,
+            when=when,
+        )
+        if stored.sha256 in known_hashes:
+            duplicates += 1
+            continue
+        known_hashes.add(stored.sha256)
+        db.add(
+            AttachmentModel(
+                account_id=account.id,
+                filename=filename,
+                content_type=upload.content_type,
+                size=stored.size,
+                sha256=stored.sha256,
+                stored_path=stored.relative_path,
+                year=stored.year,
+                month=stored.month,
+                category=stored.category,
+                detected_amount=stored.detected_amount,
+                text_content=stored.text_content,
+            )
+        )
+        saved += 1
+    db.commit()
+
+    if saved:
+        matching.reconcile(db)
+    message = f"{saved} Beleg(e) hochgeladen."
+    if duplicates:
+        message += f" {duplicates} waren schon vorhanden (übersprungen)."
+    return _redirect("/attachments", message, error=saved == 0 and duplicates == 0)
+
+
+# ---------------------------------------------------------------------------
 # Smarte Suche
 # ---------------------------------------------------------------------------
 
@@ -300,6 +404,10 @@ def attachments_page(
     attachments = db.execute(stmt.limit(500)).scalars().all()
 
     accounts = db.execute(select(EmailAccount).order_by(EmailAccount.name)).scalars().all()
+
+    from datetime import date as _date
+
+    today = _date.today()
     categories = db.execute(
         select(Attachment.category).distinct().order_by(Attachment.category)
     ).scalars().all()
@@ -319,8 +427,57 @@ def attachments_page(
             "f_category": category,
             "f_year": year_filter,
             "f_q": q or "",
+            "year_options": list(range(today.year, today.year - 8, -1)),
+            "current_month": today.month,
         },
     )
+
+
+# Freemail-Domains taugen nicht als Gläubiger-Name.
+_FREEMAIL_DOMAINS = {
+    "gmail", "googlemail", "gmx", "web", "t-online", "outlook", "hotmail",
+    "yahoo", "icloud", "aol", "freenet", "posteo", "protonmail", "mail",
+    "live", "arcor", "online",
+}
+_VENDOR_STOPWORDS = {
+    "rechnung", "invoice", "ihre", "your", "beleg", "scan", "dokument",
+    "document", "mahnung", "info", "neue", "vom", "kontoauszug",
+}
+
+
+def _vendor_label(attachment: Attachment) -> str:
+    """Gläubiger-Name für den Dateinamen: Absender-Domain, sonst Betreff/Datei."""
+    email_addr = (attachment.sender_email or "").lower()
+    if "@" in email_addr:
+        parts = email_addr.split("@", 1)[1].split(".")
+        if len(parts) >= 2:
+            label = parts[-2]
+            if label in {"co", "com", "gov"} and len(parts) >= 3:
+                label = parts[-3]
+            if label and label not in _FREEMAIL_DOMAINS:
+                return label.capitalize()
+    import re as _re
+
+    for source in (attachment.subject or "", attachment.filename or ""):
+        for word in _re.findall(r"[A-Za-zÄÖÜäöüß]{3,}", source):
+            if word.lower() not in _VENDOR_STOPWORDS:
+                return word.capitalize()
+    return "Beleg"
+
+
+def _download_name(attachment: Attachment) -> str:
+    """Gewünschtes Namensschema: '12.845,56_Aral.pdf' (Betrag_Gläubiger)."""
+    if attachment.detected_amount is None:
+        return attachment.filename
+    amount = (
+        f"{float(attachment.detected_amount):,.2f}"
+        .replace(",", "#").replace(".", ",").replace("#", ".")
+    )
+    from ..services.text_utils import safe_filename
+
+    vendor = safe_filename(_vendor_label(attachment), fallback="Beleg")
+    extension = Path(attachment.filename).suffix or ".pdf"
+    return f"{amount}_{vendor}{extension}"
 
 
 @router.get("/attachments/{attachment_id}/download")
@@ -334,7 +491,7 @@ def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
         return _redirect("/attachments", "Datei nicht mehr vorhanden.", error=True)
     return FileResponse(
         str(full_path),
-        filename=attachment.filename,
+        filename=_download_name(attachment),
         media_type=attachment.content_type or "application/octet-stream",
     )
 
