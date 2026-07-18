@@ -154,3 +154,30 @@ def test_manual_account_hidden_from_accounts_page(client):
     )
     resp = client.get("/accounts")
     assert "Manuelle Uploads" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Wartung: Beträge neu erkennen
+# ---------------------------------------------------------------------------
+
+
+def test_recalculate_amounts(client, db):
+    account = EmailAccount(
+        name="T3", host="imap.example.org", username="u@example.org",
+        password_enc=encrypt("x"),
+    )
+    db.add(account)
+    db.commit()
+    att = Attachment(
+        account_id=account.id, filename="alt.pdf", sha256="c3" * 32,
+        stored_path="x/alt.pdf", year=2026, month=6,
+        detected_amount=Decimal("15000.00"),  # alter, falscher Wert (Position)
+        text_content=INVOICE_WITH_BIG_POSITION,
+    )
+    db.add(att)
+    db.commit()
+
+    resp = client.post("/settings/recalculate-amounts", follow_redirects=False)
+    assert resp.status_code == 303
+    db.expire_all()
+    assert db.get(Attachment, att.id).detected_amount == Decimal("12845.56")

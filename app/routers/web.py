@@ -775,6 +775,31 @@ def toggle_drive(db: Session = Depends(get_db), enabled: bool = Form(False)):
     return _redirect("/settings", f"Drive-Spiegelung {state}.")
 
 
+@router.post("/settings/recalculate-amounts")
+def recalculate_amounts(db: Session = Depends(get_db)):
+    """Beträge aller Belege mit der aktuellen Endbetrag-Logik neu berechnen."""
+    from ..services.text_utils import detect_total_amount
+
+    attachments = db.execute(
+        select(Attachment).where(Attachment.text_content.is_not(None))
+    ).scalars().all()
+    changed = 0
+    for att in attachments:
+        new_amount = detect_total_amount(att.text_content)
+        if new_amount != att.detected_amount:
+            att.detected_amount = new_amount
+            changed += 1
+    db.commit()
+    if changed:
+        matching.reconcile(db)
+    return _redirect(
+        "/settings",
+        f"Beträge neu erkannt: {changed} von {len(attachments)} Belegen korrigiert, "
+        "Gegenkontrolle aktualisiert." if changed else
+        f"Beträge geprüft: alle {len(attachments)} Belege waren schon korrekt.",
+    )
+
+
 @router.post("/settings/drive/mirror-now")
 def mirror_now(db: Session = Depends(get_db)):
     if not gdrive.is_connected(db):
