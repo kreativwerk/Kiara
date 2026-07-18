@@ -41,7 +41,7 @@ def cmd_index(args: argparse.Namespace) -> int:
     from .models import Attachment
     from .services import ocr
     from .services.attachments import extract_text
-    from .services.text_utils import extract_amounts
+    from .services.text_utils import detect_total_amount
 
     init_db()
     settings = get_settings()
@@ -65,9 +65,7 @@ def cmd_index(args: argparse.Namespace) -> int:
                 continue
             att.text_content = text
             if att.detected_amount is None:
-                amounts = extract_amounts(text)
-                if amounts:
-                    att.detected_amount = max(amounts)
+                att.detected_amount = detect_total_amount(text)
             indexed += 1
             if i % 25 == 0:
                 db.commit()

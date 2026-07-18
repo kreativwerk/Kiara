@@ -11,7 +11,7 @@ from pathlib import Path
 from ..categorize import categorize
 from ..config import get_settings
 from . import ocr
-from .text_utils import extract_amounts, safe_filename, slugify
+from .text_utils import detect_total_amount, safe_filename, slugify
 
 log = logging.getLogger("kiara.attachments")
 
@@ -111,8 +111,7 @@ def store_attachment(
     relative_path = str(stored_path.relative_to(settings.data_dir))
     category = categorize(clean_name, subject)
     text_content = extract_text(stored_path)
-    amounts = extract_amounts(text_content) if text_content else []
-    detected_amount = max(amounts) if amounts else None
+    detected_amount = detect_total_amount(text_content) if text_content else None
 
     return StoredFile(
         sha256=sha256,
