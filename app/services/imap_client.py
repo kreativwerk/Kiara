@@ -108,6 +108,16 @@ def friendly_error(exc: BaseException) -> str:
     der Nutzer bekommt eine Erklärung mit Handlungstipp.
     """
     raw = error_text(exc).lower()
+    if "application-specific password" in raw or "app-specific password" in raw or (
+        "support.google.com" in raw
+    ):
+        return (
+            "Google verlangt ein App-Passwort – das normale Gmail-Passwort "
+            "funktioniert in Mail-Programmen nicht. So geht's: 1) Im Google-Konto "
+            "die Bestätigung in zwei Schritten aktivieren. 2) Auf "
+            "myaccount.google.com/apppasswords ein App-Passwort erstellen. "
+            "3) Dieses 16-stellige Passwort in Kiara eintragen."
+        )
     if any(k in raw for k in ("authentication", "login", "credential", "password", "anmeld")):
         return (
             "Anmeldung fehlgeschlagen – der Mailserver hat Benutzername oder "

@@ -124,3 +124,13 @@ def test_friendly_error_fallback_has_no_tech_jargon():
     msg = friendly_error(Exception("б'weird stuff' traceback 0x1f"))
     assert "Protokoll" in msg
     assert "traceback" not in msg.lower() or "Protokoll" in msg
+
+
+def test_friendly_error_gmail_app_password():
+    msg = friendly_error(imaplib.IMAP4.error(
+        b"[ALERT] Application-specific password required: "
+        b"https://support.google.com/accounts/answer/185833 (Failure)"
+    ))
+    assert "App-Passwort" in msg
+    assert "apppasswords" in msg
+    assert "support.google.com" not in msg  # kein Technik-Link-Salat
