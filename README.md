@@ -139,13 +139,25 @@ durch; danach hält er das Archiv ohne Zutun aktuell.
 
 Presets:
 
-| Anbieter | IMAP-Server            | Port |
-|----------|------------------------|------|
-| IONOS    | `imap.ionos.de`        | 993  |
-| GMX      | `imap.gmx.net`         | 993  |
-| WEB.DE   | `imap.web.de`          | 993  |
-| Gmail    | `imap.gmail.com`       | 993  |
-| Outlook  | `outlook.office365.com`| 993  |
+| Anbieter | IMAP-Server            | Port | Besonderheit |
+|----------|------------------------|------|--------------|
+| IONOS    | `imap.ionos.de`        | 993  | Postfach-Passwort (nicht Kundenkonto) |
+| GMX      | `imap.gmx.net`         | 993  | IMAP in den Einstellungen erlauben |
+| WEB.DE   | `imap.web.de`          | 993  | IMAP in den Einstellungen erlauben |
+| Gmail    | `imap.gmail.com`       | 993  | **App-Passwort nötig** (s. u.) |
+| Outlook  | `outlook.office365.com`| 993  | meist App-Passwort nötig |
+
+### Gmail anbinden
+
+Google blockiert normale Passwörter in Mail-Programmen – Gmail funktioniert
+mit einem **App-Passwort**:
+
+1. Im [Google-Konto](https://myaccount.google.com/security) die
+   **Bestätigung in zwei Schritten** aktivieren (Voraussetzung).
+2. Auf [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+   ein App-Passwort erstellen (Name z. B. „Kiara").
+3. Das angezeigte 16-stellige Passwort in Kiara als Passwort eintragen
+   (Benutzername = volle Gmail-Adresse). Fertig.
 
 ## Suche
 
