@@ -46,6 +46,7 @@ def setup_page(request: Request, db: Session = Depends(get_db)):
 @router.post("/setup")
 def do_setup(
     db: Session = Depends(get_db),
+    company: str = Form(...),
     name: str = Form(...),
     email: str = Form(...),
     password: str = Form(...),
@@ -53,6 +54,8 @@ def do_setup(
 ):
     if auth.users_exist(db):
         return RedirectResponse("/login", status_code=303)
+    if not company.strip():
+        return RedirectResponse("/setup?error=Bitte einen Firmennamen angeben.", status_code=303)
     if len(password) < auth.MIN_PASSWORD_LENGTH:
         return RedirectResponse(
             f"/setup?error=Mindestens {auth.MIN_PASSWORD_LENGTH} Zeichen für das Passwort.",
@@ -62,9 +65,19 @@ def do_setup(
         return RedirectResponse(
             "/setup?error=Die Passwörter stimmen nicht überein.", status_code=303
         )
+    from ..models import Organization
+
+    org = Organization(name=company.strip())
+    db.add(org)
+    db.commit()
     try:
-        user = auth.create_user(db, email=email, name=name, password=password, is_admin=True)
+        user = auth.create_user(
+            db, email=email, name=name, password=password,
+            is_admin=True, is_owner=True, org_id=org.id,
+        )
     except ValueError as exc:
+        db.delete(org)
+        db.commit()
         return RedirectResponse(f"/setup?error={exc}", status_code=303)
     return _login_response(user.id)
 

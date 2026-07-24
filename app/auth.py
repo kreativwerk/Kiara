@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import settings_store as store
-from .models import User
+from .models import Organization, User
 from .security import decrypt, encrypt
 
 AUTH_PASSWORD_KEY = "auth_password_hash"  # Altbestand (Einzel-Passwort)
@@ -76,6 +76,8 @@ def create_user(
     name: str,
     password: str,
     is_admin: bool = False,
+    org_id: int | None = None,
+    is_owner: bool = False,
 ) -> User:
     email = normalize_email(email)
     if not email:
@@ -88,6 +90,8 @@ def create_user(
         name=name.strip() or email,
         password_hash=hash_password(password),
         is_admin=is_admin,
+        is_owner=is_owner,
+        org_id=org_id,
         active=True,
     )
     db.add(user)
@@ -124,9 +128,46 @@ def migrate_legacy_password(db: Session) -> None:
         name="Admin",
         password_hash=legacy_hash,  # gleiches Hash-Format, Passwort bleibt gültig
         is_admin=True,
+        is_owner=True,
         active=True,
     )
     db.add(user)
+    db.commit()
+
+
+def ensure_default_org(db: Session) -> None:
+    """Mandanten-Migration für Bestandsdaten.
+
+    Legt bei Bedarf die erste Organisation an und hängt alle Datensätze
+    ohne Organisation (Benutzer, Konten, Belege, Auszüge) dort ein. Der
+    älteste Administrator wird zum Betreiber (darf Organisationen anlegen).
+    """
+    from .models import Attachment, BankStatement, EmailAccount
+
+    has_data = (
+        db.execute(select(User.id).limit(1)).first() is not None
+        or db.execute(select(EmailAccount.id).limit(1)).first() is not None
+    )
+    if not has_data:
+        return
+
+    org = db.execute(select(Organization).order_by(Organization.id)).scalars().first()
+    if org is None:
+        org = Organization(name="Meine Firma")
+        db.add(org)
+        db.flush()
+
+    for model in (User, EmailAccount, Attachment, BankStatement):
+        db.query(model).filter(model.org_id.is_(None)).update(
+            {"org_id": org.id}, synchronize_session=False
+        )
+
+    if not db.execute(select(User.id).where(User.is_owner.is_(True)).limit(1)).first():
+        first_admin = db.execute(
+            select(User).where(User.is_admin.is_(True)).order_by(User.id)
+        ).scalars().first()
+        if first_admin is not None:
+            first_admin.is_owner = True
     db.commit()
 
 

@@ -41,6 +41,7 @@ def db():
 TEST_PASSWORD = "test-passwort-123"
 TEST_EMAIL = "chef@example.org"
 TEST_NAME = "Chef"
+TEST_COMPANY = "Kreativwerk"
 
 
 @pytest.fixture
@@ -67,6 +68,7 @@ def client(anon_client):
     resp = anon_client.post(
         "/setup",
         data={
+            "company": TEST_COMPANY,
             "name": TEST_NAME,
             "email": TEST_EMAIL,
             "password": TEST_PASSWORD,
@@ -76,3 +78,11 @@ def client(anon_client):
     )
     assert resp.status_code == 303
     return anon_client
+
+
+@pytest.fixture
+def org_id(client, db):
+    """ID der beim Setup angelegten Organisation."""
+    from app.models import Organization
+
+    return db.query(Organization).first().id

@@ -1,7 +1,7 @@
 """JSON-API von Kiara (für Automatisierung / Integrationen)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -24,29 +24,57 @@ from ..services.sync import sync_account, sync_all
 router = APIRouter(prefix="/api", tags=["api"])
 
 
+def _org(request: Request) -> int | None:
+    return getattr(request.state, "org_id", None)
+
+
 @router.get("/stats", response_model=Stats)
-def stats(db: Session = Depends(get_db)) -> Stats:
+def stats(request: Request, db: Session = Depends(get_db)) -> Stats:
+    from ..models import BankStatement
+
+    org = _org(request)
     return Stats(
-        accounts=db.scalar(select(func.count()).select_from(EmailAccount)) or 0,
-        emails=db.scalar(select(func.count()).select_from(Email)) or 0,
-        attachments=db.scalar(select(func.count()).select_from(Attachment)) or 0,
-        transactions=db.scalar(select(func.count()).select_from(BankTransaction)) or 0,
-        matches=db.scalar(select(func.count()).select_from(Match)) or 0,
+        accounts=db.scalar(
+            select(func.count()).select_from(EmailAccount).where(EmailAccount.org_id == org)
+        ) or 0,
+        emails=db.scalar(
+            select(func.count()).select_from(Email).join(EmailAccount).where(
+                EmailAccount.org_id == org
+            )
+        ) or 0,
+        attachments=db.scalar(
+            select(func.count()).select_from(Attachment).where(Attachment.org_id == org)
+        ) or 0,
+        transactions=db.scalar(
+            select(func.count()).select_from(BankTransaction).join(BankStatement).where(
+                BankStatement.org_id == org
+            )
+        ) or 0,
+        matches=db.scalar(
+            select(func.count()).select_from(Match)
+            .join(BankTransaction, Match.transaction_id == BankTransaction.id)
+            .join(BankStatement)
+            .where(BankStatement.org_id == org)
+        ) or 0,
     )
 
 
 @router.get("/accounts", response_model=list[AccountOut])
-def list_accounts(db: Session = Depends(get_db)):
-    return db.execute(select(EmailAccount).order_by(EmailAccount.name)).scalars().all()
+def list_accounts(request: Request, db: Session = Depends(get_db)):
+    return db.execute(
+        select(EmailAccount).where(EmailAccount.org_id == _org(request))
+        .order_by(EmailAccount.name)
+    ).scalars().all()
 
 
 @router.post("/accounts", response_model=AccountOut, status_code=201)
-def create_account(payload: AccountCreate, db: Session = Depends(get_db)):
+def create_account(payload: AccountCreate, request: Request, db: Session = Depends(get_db)):
     preset = get_provider(payload.provider)
     host = (payload.host or "").strip() or preset.host
     if not host:
         raise HTTPException(status_code=422, detail="IMAP-Host fehlt.")
     account = EmailAccount(
+        org_id=_org(request),
         name=payload.name,
         provider=payload.provider,
         host=host,
@@ -63,31 +91,31 @@ def create_account(payload: AccountCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/accounts/{account_id}/sync", response_model=SyncResultOut)
-def sync_one(account_id: int, db: Session = Depends(get_db)):
+def sync_one(account_id: int, request: Request, db: Session = Depends(get_db)):
     account = db.get(EmailAccount, account_id)
-    if not account:
+    if not account or account.org_id != _org(request):
         raise HTTPException(status_code=404, detail="Konto nicht gefunden.")
     result = sync_account(db, account)
     return SyncResultOut(**result.__dict__)
 
 
 @router.post("/sync", response_model=list[SyncResultOut])
-def sync_all_accounts(db: Session = Depends(get_db)):
-    results = sync_all(db)
+def sync_all_accounts(request: Request, db: Session = Depends(get_db)):
+    results = sync_all(db, org_id=_org(request))
     if results:
-        matching.reconcile(db)
+        matching.reconcile(db, _org(request))
     return [SyncResultOut(**r.__dict__) for r in results]
 
 
 @router.post("/reconcile", response_model=MessageOut)
-def reconcile(db: Session = Depends(get_db)):
-    created = matching.reconcile(db)
+def reconcile(request: Request, db: Session = Depends(get_db)):
+    created = matching.reconcile(db, _org(request))
     return MessageOut(message=f"{created} Zuordnungen gefunden.")
 
 
 @router.get("/search")
-def search_attachments(q: str, db: Session = Depends(get_db), limit: int = 50):
-    hits = search_service.search(db, q, limit=min(limit, 200))
+def search_attachments(q: str, request: Request, db: Session = Depends(get_db), limit: int = 50):
+    hits = search_service.search(db, q, limit=min(limit, 200), org_id=_org(request))
     return [
         {
             "id": h.attachment.id,
@@ -107,13 +135,18 @@ def search_attachments(q: str, db: Session = Depends(get_db), limit: int = 50):
 
 @router.get("/attachments", response_model=list[AttachmentOut])
 def list_attachments(
+    request: Request,
     db: Session = Depends(get_db),
     account_id: int | None = None,
     category: str | None = None,
     year: int | None = None,
     limit: int = 200,
 ):
-    stmt = select(Attachment).order_by(Attachment.created_at.desc())
+    stmt = (
+        select(Attachment)
+        .where(Attachment.org_id == _org(request))
+        .order_by(Attachment.created_at.desc())
+    )
     if account_id:
         stmt = stmt.where(Attachment.account_id == account_id)
     if category:

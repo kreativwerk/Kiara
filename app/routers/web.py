@@ -28,6 +28,11 @@ from ..templating import templates
 router = APIRouter()
 
 
+def _org(request: Request) -> int | None:
+    """Organisation des angemeldeten Benutzers (von der Middleware gesetzt)."""
+    return getattr(request.state, "org_id", None)
+
+
 def _redirect(path: str, msg: str | None = None, error: bool = False) -> RedirectResponse:
     if msg:
         key = "error" if error else "msg"
@@ -43,26 +48,48 @@ def _redirect(path: str, msg: str | None = None, error: bool = False) -> Redirec
 
 @router.get("/")
 def dashboard(request: Request, db: Session = Depends(get_db)):
-    account_count = db.scalar(select(func.count()).select_from(EmailAccount)) or 0
-    attachment_count = db.scalar(select(func.count()).select_from(Attachment)) or 0
-    email_count = db.scalar(select(func.count()).select_from(Email)) or 0
-    txn_count = db.scalar(select(func.count()).select_from(BankTransaction)) or 0
-    matched = db.scalar(select(func.count()).select_from(Match)) or 0
+    org = _org(request)
+    account_count = db.scalar(
+        select(func.count()).select_from(EmailAccount).where(
+            EmailAccount.org_id == org, EmailAccount.provider != "manuell"
+        )
+    ) or 0
+    attachment_count = db.scalar(
+        select(func.count()).select_from(Attachment).where(Attachment.org_id == org)
+    ) or 0
+    email_count = db.scalar(
+        select(func.count()).select_from(Email).join(EmailAccount).where(
+            EmailAccount.org_id == org
+        )
+    ) or 0
+    txn_count = db.scalar(
+        select(func.count()).select_from(BankTransaction).join(BankStatement).where(
+            BankStatement.org_id == org
+        )
+    ) or 0
+    matched = db.scalar(
+        select(func.count()).select_from(Match)
+        .join(BankTransaction, Match.transaction_id == BankTransaction.id)
+        .join(BankStatement)
+        .where(BankStatement.org_id == org)
+    ) or 0
     match_pct = round(matched / txn_count * 100) if txn_count else 0
 
     by_category = db.execute(
         select(Attachment.category, func.count())
+        .where(Attachment.org_id == org)
         .group_by(Attachment.category)
         .order_by(func.count().desc())
     ).all()
 
     recent = db.execute(
-        select(Attachment).order_by(Attachment.created_at.desc()).limit(10)
+        select(Attachment).where(Attachment.org_id == org)
+        .order_by(Attachment.created_at.desc()).limit(10)
     ).scalars().all()
 
     accounts = db.execute(
         select(EmailAccount)
-        .where(EmailAccount.provider != "manuell")
+        .where(EmailAccount.org_id == org, EmailAccount.provider != "manuell")
         .order_by(EmailAccount.name)
     ).scalars().all()
 
@@ -94,7 +121,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 def accounts_page(request: Request, db: Session = Depends(get_db)):
     accounts = db.execute(
         select(EmailAccount)
-        .where(EmailAccount.provider != "manuell")
+        .where(EmailAccount.org_id == _org(request), EmailAccount.provider != "manuell")
         .order_by(EmailAccount.name)
     ).scalars().all()
     return templates.TemplateResponse(
@@ -111,6 +138,7 @@ def accounts_page(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/accounts")
 def create_account(
+    request: Request,
     db: Session = Depends(get_db),
     name: str = Form(...),
     provider: str = Form("custom"),
@@ -127,6 +155,7 @@ def create_account(
         return _redirect("/accounts", "Bitte einen IMAP-Server angeben.", error=True)
 
     account = EmailAccount(
+        org_id=_org(request),
         name=name.strip(),
         provider=provider,
         host=resolved_host,
@@ -143,9 +172,9 @@ def create_account(
 
 
 @router.post("/accounts/{account_id}/test")
-def test_account(account_id: int, db: Session = Depends(get_db)):
+def test_account(account_id: int, request: Request, db: Session = Depends(get_db)):
     account = db.get(EmailAccount, account_id)
-    if not account:
+    if not account or account.org_id != _org(request):
         return _redirect("/accounts", "Konto nicht gefunden.", error=True)
     from ..security import decrypt
 
@@ -163,26 +192,27 @@ def _run_sync_account(account_id: int) -> None:
         account = session.get(EmailAccount, account_id)
         if account:
             sync_account(session, account)
-            matching.reconcile(session)
+            matching.reconcile(session, account.org_id)
 
 
-def _run_sync_all() -> None:
+def _run_sync_all(org_id: int | None) -> None:
     from ..database import SessionLocal
 
     with SessionLocal() as session:
-        results = sync_all(session)
+        results = sync_all(session, org_id=org_id)
         if results:
-            matching.reconcile(session)
+            matching.reconcile(session, org_id)
 
 
 @router.post("/accounts/{account_id}/sync")
 def sync_one(
     account_id: int,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     account = db.get(EmailAccount, account_id)
-    if not account:
+    if not account or account.org_id != _org(request):
         return _redirect("/accounts", "Konto nicht gefunden.", error=True)
     background_tasks.add_task(_run_sync_account, account_id)
     return _redirect(
@@ -193,9 +223,9 @@ def sync_one(
 
 
 @router.post("/accounts/{account_id}/delete")
-def delete_account(account_id: int, db: Session = Depends(get_db)):
+def delete_account(account_id: int, request: Request, db: Session = Depends(get_db)):
     account = db.get(EmailAccount, account_id)
-    if account:
+    if account and account.org_id == _org(request):
         db.delete(account)
         db.commit()
     return _redirect("/accounts", "Konto gelöscht.")
@@ -204,7 +234,7 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
 @router.get("/accounts/{account_id}/edit")
 def edit_account_page(account_id: int, request: Request, db: Session = Depends(get_db)):
     account = db.get(EmailAccount, account_id)
-    if not account:
+    if not account or account.org_id != _org(request):
         return _redirect("/accounts", "Konto nicht gefunden.", error=True)
     return templates.TemplateResponse(
         request,
@@ -220,6 +250,7 @@ def edit_account_page(account_id: int, request: Request, db: Session = Depends(g
 @router.post("/accounts/{account_id}/edit")
 def update_account(
     account_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     name: str = Form(...),
     host: str = Form(...),
@@ -231,7 +262,7 @@ def update_account(
     active: bool = Form(False),
 ):
     account = db.get(EmailAccount, account_id)
-    if not account:
+    if not account or account.org_id != _org(request):
         return _redirect("/accounts", "Konto nicht gefunden.", error=True)
     account.name = name.strip()
     account.host = host.strip()
@@ -248,8 +279,10 @@ def update_account(
 
 
 @router.post("/sync")
-def sync_everything(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    background_tasks.add_task(_run_sync_all)
+def sync_everything(
+    request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+):
+    background_tasks.add_task(_run_sync_all, _org(request))
     return _redirect(
         "/",
         "Synchronisierung aller Konten gestartet – läuft im Hintergrund.",
@@ -263,13 +296,16 @@ def sync_everything(background_tasks: BackgroundTasks, db: Session = Depends(get
 MANUAL_ACCOUNT_NAME = "Manuelle Uploads"
 
 
-def _manual_account(db: Session) -> EmailAccount:
-    """Virtuelles Konto, unter dem hochgeladene Belege einsortiert werden."""
+def _manual_account(db: Session, org_id: int | None) -> EmailAccount:
+    """Virtuelles Konto (pro Organisation) für hochgeladene Belege."""
     account = db.execute(
-        select(EmailAccount).where(EmailAccount.provider == "manuell")
+        select(EmailAccount).where(
+            EmailAccount.provider == "manuell", EmailAccount.org_id == org_id
+        )
     ).scalar_one_or_none()
     if account is None:
         account = EmailAccount(
+            org_id=org_id,
             name=MANUAL_ACCOUNT_NAME,
             provider="manuell",
             host="-",
@@ -287,6 +323,7 @@ def _manual_account(db: Session) -> EmailAccount:
 
 @router.post("/attachments/upload")
 async def upload_attachments(
+    request: Request,
     db: Session = Depends(get_db),
     period_month: int = Form(0),
     period_year: int = Form(0),
@@ -297,7 +334,8 @@ async def upload_attachments(
     from ..models import Attachment as AttachmentModel
     from ..services.attachments import store_attachment
 
-    account = _manual_account(db)
+    org = _org(request)
+    account = _manual_account(db, org)
     if 1 <= period_month <= 12 and 2000 <= period_year <= 2100:
         when = _dt(period_year, period_month, 15)
     else:
@@ -328,6 +366,7 @@ async def upload_attachments(
         known_hashes.add(stored.sha256)
         db.add(
             AttachmentModel(
+                org_id=org,
                 account_id=account.id,
                 filename=filename,
                 content_type=upload.content_type,
@@ -345,7 +384,7 @@ async def upload_attachments(
     db.commit()
 
     if saved:
-        matching.reconcile(db)
+        matching.reconcile(db, org)
     message = f"{saved} Beleg(e) hochgeladen."
     if duplicates:
         message += f" {duplicates} waren schon vorhanden (übersprungen)."
@@ -360,7 +399,7 @@ async def upload_attachments(
 @router.get("/search")
 def search_page(request: Request, db: Session = Depends(get_db), q: str = ""):
     q = q.strip()
-    hits = search_service.search(db, q) if q else []
+    hits = search_service.search(db, q, org_id=_org(request)) if q else []
     return templates.TemplateResponse(
         request,
         "search.html",
@@ -389,7 +428,12 @@ def attachments_page(
     category = category.strip()
     q = q.strip()
 
-    stmt = select(Attachment).order_by(Attachment.year.desc(), Attachment.month.desc())
+    org = _org(request)
+    stmt = (
+        select(Attachment)
+        .where(Attachment.org_id == org)
+        .order_by(Attachment.year.desc(), Attachment.month.desc())
+    )
     if account_filter:
         stmt = stmt.where(Attachment.account_id == account_filter)
     if category:
@@ -403,16 +447,20 @@ def attachments_page(
         )
     attachments = db.execute(stmt.limit(500)).scalars().all()
 
-    accounts = db.execute(select(EmailAccount).order_by(EmailAccount.name)).scalars().all()
+    accounts = db.execute(
+        select(EmailAccount).where(EmailAccount.org_id == org).order_by(EmailAccount.name)
+    ).scalars().all()
 
     from datetime import date as _date
 
     today = _date.today()
     categories = db.execute(
-        select(Attachment.category).distinct().order_by(Attachment.category)
+        select(Attachment.category).where(Attachment.org_id == org)
+        .distinct().order_by(Attachment.category)
     ).scalars().all()
     years = db.execute(
-        select(Attachment.year).distinct().order_by(Attachment.year.desc())
+        select(Attachment.year).where(Attachment.org_id == org)
+        .distinct().order_by(Attachment.year.desc())
     ).scalars().all()
 
     return templates.TemplateResponse(
@@ -481,9 +529,9 @@ def _download_name(attachment: Attachment) -> str:
 
 
 @router.get("/attachments/{attachment_id}/download")
-def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
+def download_attachment(attachment_id: int, request: Request, db: Session = Depends(get_db)):
     attachment = db.get(Attachment, attachment_id)
-    if not attachment:
+    if not attachment or attachment.org_id != _org(request):
         return _redirect("/attachments", "Anhang nicht gefunden.", error=True)
     settings = get_settings()
     full_path = settings.data_dir / attachment.stored_path
@@ -505,8 +553,9 @@ def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
 def bank_page(request: Request, db: Session = Depends(get_db)):
     from datetime import date as _date
 
+    org = _org(request)
     statements = db.execute(
-        select(BankStatement).order_by(
+        select(BankStatement).where(BankStatement.org_id == org).order_by(
             BankStatement.period_year.desc(), BankStatement.period_month.desc()
         )
     ).scalars().all()
@@ -514,12 +563,13 @@ def bank_page(request: Request, db: Session = Depends(get_db)):
     year_options = list(range(today.year, today.year - 8, -1))
 
     transactions = db.execute(
-        select(BankTransaction).order_by(BankTransaction.booking_date.desc()).limit(500)
+        select(BankTransaction).join(BankStatement)
+        .where(BankStatement.org_id == org)
+        .order_by(BankTransaction.booking_date.desc()).limit(500)
     ).scalars().all()
 
     # Zuordnungen vorbereiten: transaction_id -> Match
-    matches = db.execute(select(Match)).scalars().all()
-    match_by_txn = {m.transaction_id: m for m in matches}
+    match_by_txn = {t.id: t.matches[0] for t in transactions if t.matches}
 
     total = len(transactions)
     matched = sum(1 for t in transactions if t.id in match_by_txn)
@@ -544,6 +594,7 @@ def bank_page(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/bank/upload")
 async def upload_statement(
+    request: Request,
     db: Session = Depends(get_db),
     name: str = Form(""),
     period_month: int = Form(...),
@@ -575,6 +626,7 @@ async def upload_statement(
         "Juli", "August", "September", "Oktober", "November", "Dezember",
     ]
     statement = BankStatement(
+        org_id=_org(request),
         name=name.strip() or f"Kontoauszug {month_names[period_month]} {period_year}",
         source_filename=filename,
         file_format=parsed.file_format,
@@ -608,7 +660,7 @@ async def upload_statement(
         imported += 1
     db.commit()
 
-    created = matching.reconcile(db)
+    created = matching.reconcile(db, _org(request))
     return _redirect(
         "/bank",
         f"{imported} Transaktionen importiert, {created} Belege automatisch zugeordnet.",
@@ -616,9 +668,9 @@ async def upload_statement(
 
 
 @router.post("/bank/statements/{statement_id}/delete")
-def delete_statement(statement_id: int, db: Session = Depends(get_db)):
+def delete_statement(statement_id: int, request: Request, db: Session = Depends(get_db)):
     statement = db.get(BankStatement, statement_id)
-    if not statement:
+    if not statement or statement.org_id != _org(request):
         return _redirect("/bank", "Auszug nicht gefunden.", error=True)
     name = statement.name
     db.delete(statement)  # löscht Transaktionen + Zuordnungen mit (Cascade)
@@ -627,8 +679,8 @@ def delete_statement(statement_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/bank/reconcile")
-def run_reconcile(db: Session = Depends(get_db)):
-    created = matching.reconcile(db)
+def run_reconcile(request: Request, db: Session = Depends(get_db)):
+    created = matching.reconcile(db, _org(request))
     return _redirect("/bank", f"Gegenkontrolle aktualisiert: {created} Zuordnungen gefunden.")
 
 
@@ -639,15 +691,19 @@ def assign_page(
     db: Session = Depends(get_db),
     q: str = "",
 ):
+    org = _org(request)
     txn = db.get(BankTransaction, txn_id)
-    if not txn:
+    if not txn or txn.statement.org_id != org:
         return _redirect("/bank", "Transaktion nicht gefunden.", error=True)
 
     q = q.strip()
     if q:
-        candidates = [hit.attachment for hit in search_service.search(db, q, limit=25)]
+        candidates = [
+            hit.attachment
+            for hit in search_service.search(db, q, limit=25, org_id=org)
+        ]
     else:
-        candidates = matching.suggestions(db, txn)
+        candidates = matching.suggestions(db, txn, org)
 
     return templates.TemplateResponse(
         request,
@@ -663,10 +719,16 @@ def assign_page(
 
 
 @router.post("/bank/assign/{txn_id}/{attachment_id}")
-def assign_attachment(txn_id: int, attachment_id: int, db: Session = Depends(get_db)):
+def assign_attachment(
+    txn_id: int, attachment_id: int, request: Request, db: Session = Depends(get_db)
+):
+    org = _org(request)
     txn = db.get(BankTransaction, txn_id)
     attachment = db.get(Attachment, attachment_id)
-    if not txn or not attachment:
+    if (
+        not txn or not attachment
+        or txn.statement.org_id != org or attachment.org_id != org
+    ):
         return _redirect("/bank", "Transaktion oder Beleg nicht gefunden.", error=True)
     # Bestehende Zuordnung dieser Transaktion ersetzen.
     db.query(Match).filter(Match.transaction_id == txn_id).delete(synchronize_session=False)
@@ -684,18 +746,18 @@ def assign_attachment(txn_id: int, attachment_id: int, db: Session = Depends(get
 
 
 @router.post("/matches/{match_id}/confirm")
-def confirm_match(match_id: int, db: Session = Depends(get_db)):
+def confirm_match(match_id: int, request: Request, db: Session = Depends(get_db)):
     match = db.get(Match, match_id)
-    if match:
+    if match and match.transaction.statement.org_id == _org(request):
         match.confirmed = True
         db.commit()
     return _redirect("/bank", "Zuordnung bestätigt.")
 
 
 @router.post("/matches/{match_id}/delete")
-def delete_match(match_id: int, db: Session = Depends(get_db)):
+def delete_match(match_id: int, request: Request, db: Session = Depends(get_db)):
     match = db.get(Match, match_id)
-    if match:
+    if match and match.transaction.statement.org_id == _org(request):
         db.delete(match)
         db.commit()
     return _redirect("/bank", "Zuordnung entfernt.")
@@ -734,12 +796,22 @@ def create_user_route(
     email: str = Form(...),
     password: str = Form(...),
     is_admin: bool = Form(False),
+    org_id: int = Form(0),
 ):
     from .. import auth as auth_module
 
     actor = _current_user(request, db)
     if not actor or not actor.is_admin:
         return _redirect("/settings", "Nur Administratoren dürfen Benutzer anlegen.", error=True)
+    # Organisations-Admins legen Benutzer NUR in der eigenen Organisation an;
+    # der Betreiber darf die Organisation frei wählen.
+    target_org = actor.org_id
+    if actor.is_owner and org_id:
+        from ..models import Organization
+
+        if db.get(Organization, org_id) is None:
+            return _redirect("/settings", "Organisation nicht gefunden.", error=True)
+        target_org = org_id
     if len(password) < auth_module.MIN_PASSWORD_LENGTH:
         return _redirect(
             "/settings",
@@ -748,7 +820,8 @@ def create_user_route(
         )
     try:
         user = auth_module.create_user(
-            db, email=email, name=name, password=password, is_admin=bool(is_admin)
+            db, email=email, name=name, password=password,
+            is_admin=bool(is_admin), org_id=target_org,
         )
     except ValueError as exc:
         return _redirect("/settings", str(exc), error=True)
@@ -763,13 +836,17 @@ def toggle_user(user_id: int, request: Request, db: Session = Depends(get_db)):
     if not actor or not actor.is_admin:
         return _redirect("/settings", "Nur Administratoren dürfen Benutzer verwalten.", error=True)
     user = db.get(User, user_id)
-    if not user:
+    if not user or (not actor.is_owner and user.org_id != actor.org_id):
         return _redirect("/settings", "Benutzer nicht gefunden.", error=True)
     if user.id == actor.id:
         return _redirect("/settings", "Du kannst dich nicht selbst deaktivieren.", error=True)
-    admins_left = db.query(User).filter(User.is_admin.is_(True), User.active.is_(True)).count()
+    if user.is_owner and not actor.is_owner:
+        return _redirect("/settings", "Der Betreiber kann nicht verwaltet werden.", error=True)
+    admins_left = db.query(User).filter(
+        User.is_admin.is_(True), User.active.is_(True), User.org_id == user.org_id
+    ).count()
     if user.is_admin and user.active and admins_left <= 1:
-        return _redirect("/settings", "Der letzte aktive Administrator kann nicht deaktiviert werden.", error=True)
+        return _redirect("/settings", "Der letzte aktive Administrator dieser Organisation kann nicht deaktiviert werden.", error=True)
     user.active = not user.active
     db.commit()
     state = "aktiviert" if user.active else "deaktiviert"
@@ -784,17 +861,82 @@ def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
     if not actor or not actor.is_admin:
         return _redirect("/settings", "Nur Administratoren dürfen Benutzer verwalten.", error=True)
     user = db.get(User, user_id)
-    if not user:
+    if not user or (not actor.is_owner and user.org_id != actor.org_id):
         return _redirect("/settings", "Benutzer nicht gefunden.", error=True)
     if user.id == actor.id:
         return _redirect("/settings", "Du kannst dich nicht selbst löschen.", error=True)
-    admins_left = db.query(User).filter(User.is_admin.is_(True), User.active.is_(True)).count()
+    if user.is_owner and not actor.is_owner:
+        return _redirect("/settings", "Der Betreiber kann nicht verwaltet werden.", error=True)
+    admins_left = db.query(User).filter(
+        User.is_admin.is_(True), User.active.is_(True), User.org_id == user.org_id
+    ).count()
     if user.is_admin and user.active and admins_left <= 1:
-        return _redirect("/settings", "Der letzte aktive Administrator kann nicht gelöscht werden.", error=True)
+        return _redirect("/settings", "Der letzte aktive Administrator dieser Organisation kann nicht gelöscht werden.", error=True)
     name = user.name
     db.delete(user)
     db.commit()
     return _redirect("/settings", f"Benutzer '{name}' gelöscht.")
+
+
+@router.post("/settings/orgs")
+def create_org(
+    request: Request,
+    db: Session = Depends(get_db),
+    org_name: str = Form(...),
+    admin_name: str = Form(...),
+    admin_email: str = Form(...),
+    admin_password: str = Form(...),
+):
+    from .. import auth as auth_module
+    from ..models import Organization
+
+    actor = _current_user(request, db)
+    if not actor or not actor.is_owner:
+        return _redirect("/settings", "Nur der Betreiber darf Organisationen anlegen.", error=True)
+    if not org_name.strip():
+        return _redirect("/settings", "Bitte einen Namen für die Organisation angeben.", error=True)
+    if len(admin_password) < auth_module.MIN_PASSWORD_LENGTH:
+        return _redirect(
+            "/settings",
+            f"Passwort braucht mindestens {auth_module.MIN_PASSWORD_LENGTH} Zeichen.",
+            error=True,
+        )
+    org = Organization(name=org_name.strip())
+    db.add(org)
+    db.commit()
+    try:
+        auth_module.create_user(
+            db, email=admin_email, name=admin_name, password=admin_password,
+            is_admin=True, org_id=org.id,
+        )
+    except ValueError as exc:
+        db.delete(org)
+        db.commit()
+        return _redirect("/settings", str(exc), error=True)
+    return _redirect(
+        "/settings",
+        f"Organisation '{org.name}' angelegt – Zugang für {admin_email} ist bereit.",
+    )
+
+
+@router.post("/settings/orgs/{org_id}/rename")
+def rename_org(
+    org_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    org_name: str = Form(...),
+):
+    from ..models import Organization
+
+    actor = _current_user(request, db)
+    if not actor or not actor.is_owner:
+        return _redirect("/settings", "Nur der Betreiber darf Organisationen umbenennen.", error=True)
+    org = db.get(Organization, org_id)
+    if not org or not org_name.strip():
+        return _redirect("/settings", "Organisation nicht gefunden.", error=True)
+    org.name = org_name.strip()
+    db.commit()
+    return _redirect("/settings", "Organisation umbenannt.")
 
 
 @router.post("/settings/password")
@@ -828,12 +970,20 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
     unsynced = db.scalar(
         select(func.count()).select_from(Attachment).where(Attachment.drive_synced.is_(False))
     ) or 0
+    from ..models import Organization
+
     me = _current_user(request, db)
-    users = (
-        db.execute(select(User).order_by(User.name)).scalars().all()
-        if me and me.is_admin
-        else []
-    )
+    users = []
+    orgs = []
+    org_names = {}
+    if me and me.is_admin:
+        user_stmt = select(User).order_by(User.name)
+        if not me.is_owner:
+            user_stmt = user_stmt.where(User.org_id == me.org_id)
+        users = db.execute(user_stmt).scalars().all()
+    if me and me.is_owner:
+        orgs = db.execute(select(Organization).order_by(Organization.name)).scalars().all()
+        org_names = {o.id: o.name for o in orgs}
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -843,6 +993,8 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
             "unsynced": unsynced,
             "me": me,
             "users": users,
+            "orgs": orgs,
+            "org_names": org_names,
             "msg": request.query_params.get("msg"),
             "error": request.query_params.get("error"),
         },
@@ -897,12 +1049,15 @@ def toggle_drive(db: Session = Depends(get_db), enabled: bool = Form(False)):
 
 
 @router.post("/settings/recalculate-amounts")
-def recalculate_amounts(db: Session = Depends(get_db)):
+def recalculate_amounts(request: Request, db: Session = Depends(get_db)):
     """Beträge aller Belege mit der aktuellen Endbetrag-Logik neu berechnen."""
     from ..services.text_utils import detect_total_amount
 
     attachments = db.execute(
-        select(Attachment).where(Attachment.text_content.is_not(None))
+        select(Attachment).where(
+            Attachment.text_content.is_not(None),
+            Attachment.org_id == _org(request),
+        )
     ).scalars().all()
     changed = 0
     for att in attachments:
@@ -912,7 +1067,7 @@ def recalculate_amounts(db: Session = Depends(get_db)):
             changed += 1
     db.commit()
     if changed:
-        matching.reconcile(db)
+        matching.reconcile(db, _org(request))
     return _redirect(
         "/settings",
         f"Beträge neu erkannt: {changed} von {len(attachments)} Belegen korrigiert, "

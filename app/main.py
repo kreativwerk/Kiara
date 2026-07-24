@@ -36,7 +36,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token = request.cookies.get(auth.COOKIE_NAME)
         user_id = auth.verify_session_token(token) if token else None
         if user_id is not None:
-            from .models import User
+            from .models import Organization, User
 
             with SessionLocal() as db:
                 user = db.get(User, user_id)
@@ -44,6 +44,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     request.state.user_id = user.id
                     request.state.user_name = user.name
                     request.state.is_admin = user.is_admin
+                    request.state.is_owner = user.is_owner
+                    request.state.org_id = user.org_id
+                    org = db.get(Organization, user.org_id) if user.org_id else None
+                    request.state.org_name = org.name if org else ""
                     return await call_next(request)
 
         if path.startswith("/api"):
@@ -61,6 +65,7 @@ async def lifespan(app: FastAPI):
     # Alt-Installationen: Einzel-Passwort wird zum Benutzer "admin".
     with SessionLocal() as db:
         auth.migrate_legacy_password(db)
+        auth.ensure_default_org(db)
     stop_autosync = threading.Event()
     autosync.start(stop_autosync)
     yield

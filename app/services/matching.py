@@ -16,7 +16,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Attachment, BankTransaction, Match
+from ..models import Attachment, BankStatement, BankTransaction, Match
 
 DEFAULT_DATE_WINDOW = 60  # Tage: ein Beleg darf so lange vor der Zahlung liegen
 DEFAULT_AMOUNT_TOLERANCE = Decimal("0.01")
@@ -126,13 +126,24 @@ def _score(
 
 def reconcile(
     db: Session,
+    org_id: int | None = None,
     *,
     date_window: int = DEFAULT_DATE_WINDOW,
     tolerance: Decimal = DEFAULT_AMOUNT_TOLERANCE,
 ) -> int:
-    """Berechnet automatische Zuordnungen neu. Bestätigte Matches bleiben erhalten."""
-    # Bestehende, nicht bestätigte Auto-Matches verwerfen.
-    db.query(Match).filter(Match.confirmed.is_(False)).delete(synchronize_session=False)
+    """Berechnet automatische Zuordnungen neu (pro Organisation).
+
+    Bestätigte Matches bleiben erhalten. ``org_id=None`` bedeutet: über alle
+    Daten (nur für Wartung/Tests gedacht).
+    """
+    # Bestehende, nicht bestätigte Auto-Matches verwerfen (nur diese Organisation).
+    unconfirmed = db.query(Match).filter(Match.confirmed.is_(False))
+    if org_id is not None:
+        txn_ids = select(BankTransaction.id).join(BankStatement).where(
+            BankStatement.org_id == org_id
+        )
+        unconfirmed = unconfirmed.filter(Match.transaction_id.in_(txn_ids))
+    unconfirmed.delete(synchronize_session=False)
     db.commit()
 
     confirmed = db.execute(
@@ -141,10 +152,13 @@ def reconcile(
     used_txns = {row[0] for row in confirmed}
     used_atts = {row[1] for row in confirmed}
 
-    transactions = db.execute(select(BankTransaction)).scalars().all()
-    attachments = db.execute(
-        select(Attachment).where(Attachment.detected_amount.is_not(None))
-    ).scalars().all()
+    txn_stmt = select(BankTransaction)
+    att_stmt = select(Attachment).where(Attachment.detected_amount.is_not(None))
+    if org_id is not None:
+        txn_stmt = txn_stmt.join(BankStatement).where(BankStatement.org_id == org_id)
+        att_stmt = att_stmt.where(Attachment.org_id == org_id)
+    transactions = db.execute(txn_stmt).scalars().all()
+    attachments = db.execute(att_stmt).scalars().all()
 
     candidates: list[MatchCandidate] = []
     for txn in transactions:
@@ -182,15 +196,17 @@ def reconcile(
 def suggestions(
     db: Session,
     txn: BankTransaction,
+    org_id: int | None = None,
     *,
     tolerance: Decimal = Decimal("0.50"),
     limit: int = 15,
 ) -> list[Attachment]:
     """Kandidaten für die manuelle Zuordnung: passender Betrag, Datum in der Nähe."""
     target = abs(Decimal(txn.amount))
-    attachments = db.execute(
-        select(Attachment).where(Attachment.detected_amount.is_not(None))
-    ).scalars().all()
+    att_stmt = select(Attachment).where(Attachment.detected_amount.is_not(None))
+    if org_id is not None:
+        att_stmt = att_stmt.where(Attachment.org_id == org_id)
+    attachments = db.execute(att_stmt).scalars().all()
 
     def sort_key(att: Attachment):
         amount_delta = abs(Decimal(att.detected_amount) - target)

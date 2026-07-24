@@ -10,8 +10,11 @@
         Benutzer anlegen kannst.
     </p>
     <form method="post" action="/setup" class="form-grid single">
+        <label>Firmenname (deine Organisation)
+            <input type="text" name="company" autofocus required placeholder="z.B. Kreativwerk">
+        </label>
         <label>Dein Name
-            <input type="text" name="name" autofocus required>
+            <input type="text" name="name" required>
         </label>
         <label>E-Mail-Adresse (dein Anmeldename)
             <input type="email" name="email" required>
