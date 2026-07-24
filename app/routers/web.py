@@ -28,6 +28,19 @@ from ..templating import templates
 router = APIRouter()
 
 
+def _parse_iso_date(value: str):
+    """'YYYY-MM-DD' aus einem Datumsfeld -> date oder None."""
+    from datetime import date as _date
+
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return _date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def _org(request: Request) -> int | None:
     """Organisation des angemeldeten Benutzers (von der Middleware gesetzt)."""
     return getattr(request.state, "org_id", None)
@@ -148,6 +161,7 @@ def create_account(
     username: str = Form(...),
     password: str = Form(...),
     folders: str = Form("INBOX"),
+    sync_since: str = Form(""),
 ):
     preset = get_provider(provider)
     resolved_host = host.strip() or preset.host
@@ -164,6 +178,7 @@ def create_account(
         username=username.strip(),
         password_enc=encrypt(password),
         folders=folders.strip() or "INBOX",
+        sync_since=_parse_iso_date(sync_since),
         active=True,
     )
     db.add(account)
@@ -259,6 +274,7 @@ def update_account(
     username: str = Form(...),
     password: str = Form(""),
     folders: str = Form("INBOX"),
+    sync_since: str = Form(""),
     active: bool = Form(False),
 ):
     account = db.get(EmailAccount, account_id)
@@ -270,6 +286,7 @@ def update_account(
     account.use_ssl = bool(use_ssl)
     account.username = username.strip()
     account.folders = folders.strip() or "INBOX"
+    account.sync_since = _parse_iso_date(sync_since)
     account.active = bool(active)
     if password.strip():
         account.password_enc = encrypt(password)

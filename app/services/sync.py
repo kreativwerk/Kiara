@@ -145,7 +145,9 @@ def _do_sync(db: Session, account: EmailAccount, max_fetch: int | None = None) -
             for folder in _resolve_folders(conn, account):
                 known_uids = _known_uids(db, account.id, folder)
                 since_uid = max(known_uids) if known_uids else 0
-                for msg in imap_client.fetch_messages(conn, folder, since_uid, max_fetch):
+                for msg in imap_client.fetch_messages(
+                    conn, folder, since_uid, max_fetch, account.sync_since
+                ):
                     try:
                         uid_int = int(msg.uid)
                     except (TypeError, ValueError):
@@ -153,6 +155,12 @@ def _do_sync(db: Session, account: EmailAccount, max_fetch: int | None = None) -
                     if uid_int is not None and uid_int in known_uids:
                         result.skipped_duplicates += 1
                         continue
+                    if (
+                        account.sync_since
+                        and msg.sent_at
+                        and msg.sent_at.date() < account.sync_since
+                    ):
+                        continue  # älter als das gewählte Startdatum
 
                     when = msg.sent_at or datetime.utcnow()
                     try:

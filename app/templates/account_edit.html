@@ -26,6 +26,9 @@
         <label>Ordner (kommagetrennt, * = alle Ordner)
             <input type="text" name="folders" value="{{ account.folders }}">
         </label>
+        <label>Synchronisieren ab (optional)
+            <input type="date" name="sync_since" value="{{ account.sync_since or '' }}">
+        </label>
         <label class="checkbox">
             <input type="checkbox" name="active" value="true" {{ 'checked' if account.active else '' }}> Konto aktiv (wird synchronisiert)
         </label>
@@ -34,6 +37,11 @@
             <a href="/accounts" class="btn ghost">Abbrechen</a>
         </div>
     </form>
+    <p class="muted small">
+        „Synchronisieren ab": E-Mails vor diesem Datum werden ignoriert.
+        Wird das Datum später weiter zurückgesetzt, holt Kiara ältere Mails
+        aus bereits durchsuchten Ordnern nicht automatisch nach.
+    </p>
     <p class="muted small">
         Tipp: <code>*</code> im Ordner-Feld synchronisiert <strong>alle Ordner</strong> des
         Postfachs (ohne Spam, Papierkorb, Entwürfe und Gesendet) – so werden auch Belege

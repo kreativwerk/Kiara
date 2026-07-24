@@ -1,7 +1,7 @@
 """Pydantic-Schemas für die JSON-API."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,6 +15,7 @@ class AccountCreate(BaseModel):
     username: str
     password: str
     folders: str = "INBOX"
+    sync_since: date | None = None
 
 
 class AccountOut(BaseModel):
@@ -28,6 +29,7 @@ class AccountOut(BaseModel):
     use_ssl: bool
     username: str
     folders: str
+    sync_since: date | None = None
     active: bool
     last_synced_at: datetime | None = None
     last_error: str | None = None
