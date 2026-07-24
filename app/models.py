@@ -25,6 +25,9 @@ class EmailAccount(Base):
     __tablename__ = "email_accounts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(120))
     provider: Mapped[str] = mapped_column(String(40), default="custom")
     host: Mapped[str] = mapped_column(String(255))
@@ -81,6 +84,9 @@ class Attachment(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True, index=True
+    )
     account_id: Mapped[int] = mapped_column(ForeignKey("email_accounts.id"))
     email_id: Mapped[int | None] = mapped_column(ForeignKey("emails.id"), nullable=True)
     filename: Mapped[str] = mapped_column(String(500))
@@ -111,6 +117,9 @@ class BankStatement(Base):
     __tablename__ = "bank_statements"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(200))
     source_filename: Mapped[str] = mapped_column(String(500))
     file_format: Mapped[str] = mapped_column(String(20))
@@ -148,16 +157,30 @@ class BankTransaction(Base):
     )
 
 
+class Organization(Base):
+    """Mandant: abgeschotteter Bereich mit eigenen Konten, Belegen und Nutzern."""
+
+    __tablename__ = "organizations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class User(Base):
     """Benutzerkonto: angelegt durch Administratoren, keine Selbstregistrierung."""
 
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True, index=True
+    )
     email: Mapped[str] = mapped_column(String(320), unique=True)
     name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(Text)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_owner: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

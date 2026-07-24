@@ -151,7 +151,9 @@ def _snippet(text: str | None, tokens: list[str]) -> str | None:
     return f"{prefix}{snippet}{suffix}"
 
 
-def search(db: Session, query: str, limit: int = 100) -> list[SearchHit]:
+def search(
+    db: Session, query: str, limit: int = 100, org_id: int | None = None
+) -> list[SearchHit]:
     """Durchsucht alle Belege und liefert die Treffer nach Relevanz sortiert."""
     query = (query or "").strip()[:200]
     if not query:
@@ -161,6 +163,8 @@ def search(db: Session, query: str, limit: int = 100) -> list[SearchHit]:
         return []
 
     stmt = select(Attachment)
+    if org_id is not None:
+        stmt = stmt.where(Attachment.org_id == org_id)
     if parsed.year is not None:
         stmt = stmt.where(Attachment.year == parsed.year)
     if parsed.month is not None:

@@ -51,9 +51,9 @@ def test_detect_total_none():
 # ---------------------------------------------------------------------------
 
 
-def test_download_filename_scheme(client, db):
+def test_download_filename_scheme(client, db, org_id):
     account = EmailAccount(
-        name="T", host="imap.example.org", username="u@example.org",
+        org_id=org_id, name="T", host="imap.example.org", username="u@example.org",
         password_enc=encrypt("x"),
     )
     db.add(account)
@@ -66,6 +66,7 @@ def test_download_filename_scheme(client, db):
     full.write_bytes(b"%PDF-1.4 test")
 
     att = Attachment(
+        org_id=org_id,
         account_id=account.id,
         filename="tankrechnung.pdf",
         sha256="a1" * 32,
@@ -83,9 +84,9 @@ def test_download_filename_scheme(client, db):
     assert "12.845,56_Aral.pdf" in disposition.replace("%2C", ",").replace("%2E", ".")
 
 
-def test_download_filename_fallback_without_amount(client, db):
+def test_download_filename_fallback_without_amount(client, db, org_id):
     account = EmailAccount(
-        name="T2", host="imap.example.org", username="u@example.org",
+        org_id=org_id, name="T2", host="imap.example.org", username="u@example.org",
         password_enc=encrypt("x"),
     )
     db.add(account)
@@ -96,7 +97,7 @@ def test_download_filename_fallback_without_amount(client, db):
     full.parent.mkdir(parents=True, exist_ok=True)
     full.write_bytes(b"jpegdata")
     att = Attachment(
-        account_id=account.id, filename="foto.jpg", sha256="b2" * 32,
+        org_id=org_id, account_id=account.id, filename="foto.jpg", sha256="b2" * 32,
         stored_path=rel, year=2026, month=7,
     )
     db.add(att)
@@ -161,15 +162,15 @@ def test_manual_account_hidden_from_accounts_page(client):
 # ---------------------------------------------------------------------------
 
 
-def test_recalculate_amounts(client, db):
+def test_recalculate_amounts(client, db, org_id):
     account = EmailAccount(
-        name="T3", host="imap.example.org", username="u@example.org",
+        org_id=org_id, name="T3", host="imap.example.org", username="u@example.org",
         password_enc=encrypt("x"),
     )
     db.add(account)
     db.commit()
     att = Attachment(
-        account_id=account.id, filename="alt.pdf", sha256="c3" * 32,
+        org_id=org_id, account_id=account.id, filename="alt.pdf", sha256="c3" * 32,
         stored_path="x/alt.pdf", year=2026, month=6,
         detected_amount=Decimal("15000.00"),  # alter, falscher Wert (Position)
         text_content=INVOICE_WITH_BIG_POSITION,

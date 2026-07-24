@@ -44,10 +44,14 @@ def _sync_once() -> None:
     from .services import matching
     from .services.sync import sync_all
 
+    from .models import Organization
+    from sqlalchemy import select
+
     with SessionLocal() as db:
         results = sync_all(db)
         if results:
-            matching.reconcile(db)
+            for org_id in db.execute(select(Organization.id)).scalars():
+                matching.reconcile(db, org_id)
         new_attachments = sum(r.new_attachments for r in results)
         if new_attachments:
             log.info("Auto-Sync: %s neue Belege archiviert.", new_attachments)

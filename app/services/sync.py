@@ -185,6 +185,7 @@ def _do_sync(db: Session, account: EmailAccount, max_fetch: int | None = None) -
                             known.add(stored.sha256)
                             db.add(
                                 Attachment(
+                                    org_id=account.org_id,
                                     account_id=account.id,
                                     email_id=email_row.id,
                                     filename=att.filename,
@@ -236,8 +237,11 @@ def _do_sync(db: Session, account: EmailAccount, max_fetch: int | None = None) -
     return result
 
 
-def sync_all(db: Session, max_fetch: int | None = None) -> list[SyncResult]:
-    accounts = db.execute(
-        select(EmailAccount).where(EmailAccount.active.is_(True))
-    ).scalars().all()
+def sync_all(
+    db: Session, max_fetch: int | None = None, org_id: int | None = None
+) -> list[SyncResult]:
+    stmt = select(EmailAccount).where(EmailAccount.active.is_(True))
+    if org_id is not None:
+        stmt = stmt.where(EmailAccount.org_id == org_id)
+    accounts = db.execute(stmt).scalars().all()
     return [sync_account(db, account, max_fetch) for account in accounts]

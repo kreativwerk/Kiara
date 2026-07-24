@@ -25,6 +25,58 @@
     {% endif %}
 </section>
 
+{% if me and me.is_owner %}
+<section class="card">
+    <h2>{{ icon('users', 'h-icon') }}Organisationen</h2>
+    <p class="muted">
+        Jede Organisation ist ein komplett getrennter Bereich mit eigenen
+        Konten, Belegen, Kontoauszügen und Benutzern – niemand sieht die
+        Daten einer anderen Organisation.
+    </p>
+    {% if orgs %}
+    <table class="table">
+        <thead><tr><th>Name</th><th>Umbenennen</th></tr></thead>
+        <tbody>
+        {% for o in orgs %}
+        <tr>
+            <td>{{ o.name }}{% if o.id == me.org_id %} <span class="badge">deine</span>{% endif %}</td>
+            <td>
+                <form method="post" action="/settings/orgs/{{ o.id }}/rename" class="inline-form">
+                    <input type="text" name="org_name" value="{{ o.name }}">
+                    <button class="btn small">Speichern</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <h3>Neue Organisation anlegen (z.B. für ein anderes Geschäft)</h3>
+    <form method="post" action="/settings/orgs" class="form-grid">
+        <label>Name der Organisation
+            <input type="text" name="org_name" required placeholder="z.B. Firma Freund GmbH">
+        </label>
+        <label>Name des Administrators
+            <input type="text" name="admin_name" required>
+        </label>
+        <label>E-Mail des Administrators (Anmeldename)
+            <input type="email" name="admin_email" required>
+        </label>
+        <label>Start-Passwort (mind. 8 Zeichen)
+            <input type="password" name="admin_password" minlength="8" required>
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="btn primary">Organisation anlegen</button>
+        </div>
+    </form>
+    <p class="muted small">
+        Die Person meldet sich mit E-Mail + Start-Passwort an, verwaltet ihre
+        eigenen Benutzer und sieht ausschließlich die eigene Organisation.
+    </p>
+</section>
+{% endif %}
+
 {% if me and me.is_admin %}
 <section class="card">
     <h2>{{ icon('users', 'h-icon') }}Benutzer</h2>
@@ -35,13 +87,14 @@
     </p>
     {% if users %}
     <table class="table">
-        <thead><tr><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th>Aktionen</th></tr></thead>
+        <thead><tr><th>Name</th><th>E-Mail</th>{% if me.is_owner %}<th>Organisation</th>{% endif %}<th>Rolle</th><th>Status</th><th>Aktionen</th></tr></thead>
         <tbody>
         {% for u in users %}
         <tr>
             <td>{{ u.name }}{% if u.id == me.id %} <span class="badge">du</span>{% endif %}</td>
             <td>{{ u.email }}</td>
-            <td>{{ 'Administrator' if u.is_admin else 'Benutzer' }}</td>
+            {% if me.is_owner %}<td class="muted">{{ org_names.get(u.org_id, '–') }}</td>{% endif %}
+            <td>{{ 'Betreiber' if u.is_owner else ('Administrator' if u.is_admin else 'Benutzer') }}</td>
             <td><span class="badge {{ 'ok' if u.active else 'err' }}">{{ 'aktiv' if u.active else 'deaktiviert' }}</span></td>
             <td class="actions">
                 {% if u.id != me.id %}
@@ -74,6 +127,15 @@
         <label class="checkbox">
             <input type="checkbox" name="is_admin" value="true"> Administrator (darf Benutzer verwalten)
         </label>
+        {% if me.is_owner and orgs %}
+        <label>Organisation
+            <select name="org_id">
+                {% for o in orgs %}
+                <option value="{{ o.id }}" {{ 'selected' if o.id == me.org_id else '' }}>{{ o.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        {% endif %}
         <div class="form-actions">
             <button type="submit" class="btn primary">Benutzer anlegen</button>
         </div>

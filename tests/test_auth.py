@@ -29,7 +29,7 @@ def test_api_requires_login(anon_client):
 def test_setup_rejects_short_password(anon_client):
     resp = anon_client.post(
         "/setup",
-        data={"name": "A", "email": "a@b.de", "password": "kurz", "password2": "kurz"},
+        data={"company": "F", "name": "A", "email": "a@b.de", "password": "kurz", "password2": "kurz"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -40,7 +40,7 @@ def test_setup_rejects_mismatch(anon_client):
     resp = anon_client.post(
         "/setup",
         data={
-            "name": "A", "email": "a@b.de",
+            "company": "F", "name": "A", "email": "a@b.de",
             "password": "langespasswort", "password2": "anderespasswort",
         },
         follow_redirects=False,
@@ -101,7 +101,7 @@ def test_setup_not_repeatable(client):
     resp = client.post(
         "/setup",
         data={
-            "name": "X", "email": "x@y.de",
+            "company": "F", "name": "X", "email": "x@y.de",
             "password": "neuespasswort1", "password2": "neuespasswort1",
         },
         follow_redirects=False,

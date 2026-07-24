@@ -83,7 +83,7 @@ def test_sync_runs_in_background(client, monkeypatch):
 
 def test_sync_all_runs_in_background(client, monkeypatch):
     called: list[bool] = []
-    monkeypatch.setattr("app.routers.web._run_sync_all", lambda: called.append(True))
+    monkeypatch.setattr("app.routers.web._run_sync_all", lambda org_id: called.append(True))
 
     resp = client.post("/sync", follow_redirects=False)
     assert resp.status_code == 303

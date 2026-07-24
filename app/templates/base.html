@@ -43,6 +43,9 @@
     <div class="sidebar-foot">
         {% if request.state.user_name %}
         <span class="sidebar-user" title="Angemeldet als">{{ icon('user', 'icon icon-sm') }} {{ request.state.user_name }}</span>
+        {% if request.state.org_name %}
+        <span class="sidebar-org">{{ request.state.org_name }}</span>
+        {% endif %}
         {% endif %}
         <form method="post" action="/logout">
             <button type="submit" class="logout-btn">

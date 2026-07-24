@@ -52,19 +52,19 @@ def test_delete_statement_removes_transactions(client, db):
     assert db.query(BankTransaction).count() == 0
 
 
-def test_manual_assign_flow(client, db):
+def test_manual_assign_flow(client, db, org_id):
     account = EmailAccount(
-        name="T", host="imap.example.org", username="u@example.org",
+        org_id=org_id, name="T", host="imap.example.org", username="u@example.org",
         password_enc=encrypt("secret"),
     )
     db.add(account)
     db.commit()
     att = Attachment(
-        account_id=account.id, filename="eon_abschlag.pdf", sha256="9" * 64,
+        org_id=org_id, account_id=account.id, filename="eon_abschlag.pdf", sha256="9" * 64,
         stored_path="x/e.pdf", year=2026, month=6, detected_amount=Decimal("92.00"),
     )
     stmt = BankStatement(
-        name="s", source_filename="s.csv", file_format="csv",
+        org_id=org_id, name="s", source_filename="s.csv", file_format="csv",
         period_year=2026, period_month=6,
     )
     db.add_all([att, stmt])

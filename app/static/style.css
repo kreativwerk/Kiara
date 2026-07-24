@@ -105,7 +105,11 @@ body.app { display: flex; min-height: 100vh; }
 .sidebar-foot { margin-top: auto; border-top: 1px solid var(--shell-line); padding-top: .9rem; }
 .sidebar-user {
     display: block; color: var(--shell-ink); font-size: .85rem; font-weight: 600;
-    padding: .2rem .8rem .5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: .2rem .8rem 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sidebar-org {
+    display: block; color: var(--shell-ink); opacity: .65; font-size: .74rem;
+    padding: 0 .8rem .5rem 2.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .logout-btn {
     display: flex; align-items: center; gap: .7rem; width: 100%;
@@ -338,6 +342,7 @@ body.anon .container { display: grid; place-items: center; min-height: 72vh; }
     .nav-label { display: none; }
     .sidebar-foot { margin: 0 0 0 auto; border: none; padding: 0; display: flex; align-items: center; gap: .2rem; }
     .sidebar-user { padding: 0; max-width: 110px; font-size: .8rem; }
+    .sidebar-org { display: none; }
     .logout-btn { padding: .45rem .6rem; }
     .logout-btn svg { width: 17px; height: 17px; }
     .logout-btn .nav-text { font-size: .85rem; }
