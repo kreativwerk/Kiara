@@ -169,6 +169,7 @@ Presets:
 | Gmail    | `imap.gmail.com`       | 993  | **App-Passwort nötig** (s. u.) |
 | Outlook  | `outlook.office365.com`| 993  | meist App-Passwort nötig |
 | Hotmail/Live | `outlook.office365.com`| 993 | meist App-Passwort nötig |
+| STRATO   | `imap.strato.de`       | 993  | Postfach-Passwort (nicht Kundenkonto) |
 
 ### Gmail anbinden
 

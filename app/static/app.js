@@ -27,6 +27,9 @@
         hotmail:
             "Hotmail/Live sind Microsoft-Konten und brauchen meist ein App-Passwort: " +
             "account.microsoft.com → Sicherheit → Zwei-Faktor aktivieren → App-Passwort erstellen.",
+        strato:
+            "Das E-Mail-Postfach-Passwort verwenden (im STRATO-Kundenlogin unter " +
+            "E-Mail-Verwaltung gesetzt), nicht das STRATO-Kundenkonto-Passwort.",
     };
 
     function applyPreset() {

@@ -57,3 +57,17 @@ def test_hotmail_preset(client):
     )
     assert resp.status_code == 201
     assert resp.json()["host"] == "outlook.office365.com"
+
+
+def test_strato_preset(client):
+    resp = client.post(
+        "/api/accounts",
+        json={
+            "name": "Strato Konto",
+            "provider": "strato",
+            "username": "info@meine-domain.de",
+            "password": "postfach-passwort",
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["host"] == "imap.strato.de"
