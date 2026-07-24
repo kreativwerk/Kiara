@@ -4,18 +4,25 @@
 <div class="auth-box card">
     <h1>👋 Willkommen bei Kiara</h1>
     <p class="muted">
-        Lege einmalig ein Passwort fest, um dein Belegarchiv zu schützen.
-        Du brauchst es künftig zum Anmelden.
+        Lege das erste Benutzerkonto an – es ist automatisch das
+        <strong>Administrator-Konto</strong>, mit dem du später weitere
+        Benutzer anlegen kannst.
     </p>
     <form method="post" action="/setup" class="form-grid single">
+        <label>Dein Name
+            <input type="text" name="name" autofocus required>
+        </label>
+        <label>E-Mail-Adresse (dein Anmeldename)
+            <input type="email" name="email" required>
+        </label>
         <label>Passwort (mind. 8 Zeichen)
-            <input type="password" name="password" minlength="8" autofocus required>
+            <input type="password" name="password" minlength="8" required>
         </label>
         <label>Passwort wiederholen
             <input type="password" name="password2" minlength="8" required>
         </label>
         <div class="form-actions">
-            <button type="submit" class="btn primary">Passwort festlegen &amp; starten</button>
+            <button type="submit" class="btn primary">Konto anlegen &amp; starten</button>
         </div>
     </form>
 </div>

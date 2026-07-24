@@ -32,16 +32,22 @@ def test_limiter_reset():
 
 
 def test_login_rate_limited(client):
+    from tests.conftest import TEST_EMAIL
+
     client.cookies.clear()
     # 5 Fehlversuche verbrauchen das Limit ...
     for _ in range(5):
         resp = client.post(
-            "/login", data={"password": "falsch"}, follow_redirects=False
+            "/login",
+            data={"email": TEST_EMAIL, "password": "falsch"},
+            follow_redirects=False,
         )
-        assert "Falsches" in resp.headers["location"]
+        assert "falsch" in resp.headers["location"]
     # ... der 6. wird geblockt, selbst mit korrektem Passwort.
     resp = client.post(
-        "/login", data={"password": TEST_PASSWORD}, follow_redirects=False
+        "/login",
+        data={"email": TEST_EMAIL, "password": TEST_PASSWORD},
+        follow_redirects=False,
     )
     assert "Fehlversuche" in resp.headers["location"]
     assert client.get("/api/stats").status_code == 401

@@ -710,11 +710,130 @@ def _drive_redirect_uri(request: Request) -> str:
     return str(request.url_for("google_callback"))
 
 
+def _current_user(request: Request, db: Session):
+    from .. import auth as auth_module
+    from ..models import User
+
+    user_id = getattr(request.state, "user_id", None)
+    if user_id is None:
+        token = request.cookies.get(auth_module.COOKIE_NAME)
+        user_id = auth_module.verify_session_token(token) if token else None
+    return db.get(User, user_id) if user_id is not None else None
+
+
+# ---------------------------------------------------------------------------
+# Benutzerverwaltung (nur Administratoren; keine Selbstregistrierung)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/settings/users")
+def create_user_route(
+    request: Request,
+    db: Session = Depends(get_db),
+    name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    is_admin: bool = Form(False),
+):
+    from .. import auth as auth_module
+
+    actor = _current_user(request, db)
+    if not actor or not actor.is_admin:
+        return _redirect("/settings", "Nur Administratoren dürfen Benutzer anlegen.", error=True)
+    if len(password) < auth_module.MIN_PASSWORD_LENGTH:
+        return _redirect(
+            "/settings",
+            f"Passwort braucht mindestens {auth_module.MIN_PASSWORD_LENGTH} Zeichen.",
+            error=True,
+        )
+    try:
+        user = auth_module.create_user(
+            db, email=email, name=name, password=password, is_admin=bool(is_admin)
+        )
+    except ValueError as exc:
+        return _redirect("/settings", str(exc), error=True)
+    return _redirect("/settings", f"Benutzer '{user.name}' angelegt.")
+
+
+@router.post("/settings/users/{user_id}/toggle")
+def toggle_user(user_id: int, request: Request, db: Session = Depends(get_db)):
+    from ..models import User
+
+    actor = _current_user(request, db)
+    if not actor or not actor.is_admin:
+        return _redirect("/settings", "Nur Administratoren dürfen Benutzer verwalten.", error=True)
+    user = db.get(User, user_id)
+    if not user:
+        return _redirect("/settings", "Benutzer nicht gefunden.", error=True)
+    if user.id == actor.id:
+        return _redirect("/settings", "Du kannst dich nicht selbst deaktivieren.", error=True)
+    admins_left = db.query(User).filter(User.is_admin.is_(True), User.active.is_(True)).count()
+    if user.is_admin and user.active and admins_left <= 1:
+        return _redirect("/settings", "Der letzte aktive Administrator kann nicht deaktiviert werden.", error=True)
+    user.active = not user.active
+    db.commit()
+    state = "aktiviert" if user.active else "deaktiviert"
+    return _redirect("/settings", f"Benutzer '{user.name}' {state}.")
+
+
+@router.post("/settings/users/{user_id}/delete")
+def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
+    from ..models import User
+
+    actor = _current_user(request, db)
+    if not actor or not actor.is_admin:
+        return _redirect("/settings", "Nur Administratoren dürfen Benutzer verwalten.", error=True)
+    user = db.get(User, user_id)
+    if not user:
+        return _redirect("/settings", "Benutzer nicht gefunden.", error=True)
+    if user.id == actor.id:
+        return _redirect("/settings", "Du kannst dich nicht selbst löschen.", error=True)
+    admins_left = db.query(User).filter(User.is_admin.is_(True), User.active.is_(True)).count()
+    if user.is_admin and user.active and admins_left <= 1:
+        return _redirect("/settings", "Der letzte aktive Administrator kann nicht gelöscht werden.", error=True)
+    name = user.name
+    db.delete(user)
+    db.commit()
+    return _redirect("/settings", f"Benutzer '{name}' gelöscht.")
+
+
+@router.post("/settings/password")
+def change_own_password(
+    request: Request,
+    db: Session = Depends(get_db),
+    password: str = Form(...),
+    password2: str = Form(...),
+):
+    from .. import auth as auth_module
+
+    user = _current_user(request, db)
+    if not user:
+        return _redirect("/login", "Bitte neu anmelden.", error=True)
+    if len(password) < auth_module.MIN_PASSWORD_LENGTH:
+        return _redirect(
+            "/settings",
+            f"Passwort braucht mindestens {auth_module.MIN_PASSWORD_LENGTH} Zeichen.",
+            error=True,
+        )
+    if password != password2:
+        return _redirect("/settings", "Die Passwörter stimmen nicht überein.", error=True)
+    auth_module.set_password_for(db, user, password)
+    return _redirect("/settings", "Dein Passwort wurde geändert.")
+
+
 @router.get("/settings")
 def settings_page(request: Request, db: Session = Depends(get_db)):
+    from ..models import User
+
     unsynced = db.scalar(
         select(func.count()).select_from(Attachment).where(Attachment.drive_synced.is_(False))
     ) or 0
+    me = _current_user(request, db)
+    users = (
+        db.execute(select(User).order_by(User.name)).scalars().all()
+        if me and me.is_admin
+        else []
+    )
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -722,6 +841,8 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
             "drive": gdrive.status(db),
             "ocr_available": ocr.ocr_available(),
             "unsynced": unsynced,
+            "me": me,
+            "users": users,
             "msg": request.query_params.get("msg"),
             "error": request.query_params.get("error"),
         },

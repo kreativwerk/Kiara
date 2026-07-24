@@ -39,17 +39,23 @@ def db():
 
 
 TEST_PASSWORD = "test-passwort-123"
+TEST_EMAIL = "chef@example.org"
+TEST_NAME = "Chef"
 
 
 @pytest.fixture
-def anon_client():
-    """Client ohne Anmeldung (für Auth-Tests)."""
+def anon_client(db):
+    """Client ohne Anmeldung (für Auth-Tests).
+
+    Hängt von ``db`` ab, damit die Datenbank VOR dem Client geleert wird –
+    sonst würde ein späteres Leeren den per Setup angelegten Benutzer wieder
+    entfernen und alle authentifizierten Requests scheitern.
+    """
     from fastapi.testclient import TestClient
 
     from app.main import app
     from app.routers.auth import login_limiter
 
-    _truncate()
     login_limiter.reset_all()  # Login-Versuche nicht zwischen Tests durchschleppen
     with TestClient(app) as test_client:
         yield test_client
@@ -57,10 +63,15 @@ def anon_client():
 
 @pytest.fixture
 def client(anon_client):
-    """Angemeldeter Client: legt das App-Passwort an und loggt sich ein."""
+    """Angemeldeter Client: legt den ersten Admin-Benutzer an (Setup)."""
     resp = anon_client.post(
         "/setup",
-        data={"password": TEST_PASSWORD, "password2": TEST_PASSWORD},
+        data={
+            "name": TEST_NAME,
+            "email": TEST_EMAIL,
+            "password": TEST_PASSWORD,
+            "password2": TEST_PASSWORD,
+        },
         follow_redirects=False,
     )
     assert resp.status_code == 303

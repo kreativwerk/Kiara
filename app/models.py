@@ -148,6 +148,20 @@ class BankTransaction(Base):
     )
 
 
+class User(Base):
+    """Benutzerkonto: angelegt durch Administratoren, keine Selbstregistrierung."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True)
+    name: Mapped[str] = mapped_column(String(120))
+    password_hash: Mapped[str] = mapped_column(Text)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class AppSetting(Base):
     """Einfacher Schlüssel-Wert-Speicher für App-Einstellungen (z.B. Drive)."""
 
