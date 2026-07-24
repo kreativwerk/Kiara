@@ -24,6 +24,78 @@
     {% endif %}
 </section>
 
+{% if me and me.is_admin %}
+<section class="card">
+    <h2>👥 Benutzer</h2>
+    <p class="muted">
+        Benutzerkonten legt nur ein Administrator an – es gibt keine
+        Selbstregistrierung. Jeder Benutzer meldet sich mit eigener E-Mail und
+        eigenem Passwort an.
+    </p>
+    {% if users %}
+    <table class="table">
+        <thead><tr><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th>Aktionen</th></tr></thead>
+        <tbody>
+        {% for u in users %}
+        <tr>
+            <td>{{ u.name }}{% if u.id == me.id %} <span class="badge">du</span>{% endif %}</td>
+            <td>{{ u.email }}</td>
+            <td>{{ 'Administrator' if u.is_admin else 'Benutzer' }}</td>
+            <td><span class="badge {{ 'ok' if u.active else 'err' }}">{{ 'aktiv' if u.active else 'deaktiviert' }}</span></td>
+            <td class="actions">
+                {% if u.id != me.id %}
+                <form method="post" action="/settings/users/{{ u.id }}/toggle">
+                    <button class="btn small">{{ 'Deaktivieren' if u.active else 'Aktivieren' }}</button>
+                </form>
+                <form method="post" action="/settings/users/{{ u.id }}/delete"
+                      onsubmit="return confirm('Benutzer {{ u.name }} wirklich löschen?');">
+                    <button class="btn small danger">Löschen</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <h3>Neuen Benutzer anlegen</h3>
+    <form method="post" action="/settings/users" class="form-grid">
+        <label>Name
+            <input type="text" name="name" required>
+        </label>
+        <label>E-Mail (Anmeldename)
+            <input type="email" name="email" required>
+        </label>
+        <label>Start-Passwort (mind. 8 Zeichen)
+            <input type="password" name="password" minlength="8" required>
+        </label>
+        <label class="checkbox">
+            <input type="checkbox" name="is_admin" value="true"> Administrator (darf Benutzer verwalten)
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="btn primary">Benutzer anlegen</button>
+        </div>
+    </form>
+    <p class="muted small">Das Start-Passwort teilst du der Person mit – sie kann es unter Einstellungen selbst ändern.</p>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>🔑 Eigenes Passwort ändern</h2>
+    <form method="post" action="/settings/password" class="form-grid">
+        <label>Neues Passwort (mind. 8 Zeichen)
+            <input type="password" name="password" minlength="8" required>
+        </label>
+        <label>Wiederholen
+            <input type="password" name="password2" minlength="8" required>
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="btn">Passwort ändern</button>
+        </div>
+    </form>
+</section>
+
 <section class="card">
     <h2>🧮 Wartung</h2>
     <p class="muted">

@@ -26,7 +26,7 @@ PUBLIC_PREFIXES = ("/static/",)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Schützt alle Seiten und die API hinter dem App-Passwort."""
+    """Schützt alle Seiten und die API; prüft das Benutzerkonto pro Anfrage."""
 
     async def dispatch(self, request, call_next):
         path = request.url.path
@@ -34,14 +34,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         token = request.cookies.get(auth.COOKIE_NAME)
-        if token and auth.verify_session_token(token):
-            return await call_next(request)
+        user_id = auth.verify_session_token(token) if token else None
+        if user_id is not None:
+            from .models import User
+
+            with SessionLocal() as db:
+                user = db.get(User, user_id)
+                if user is not None and user.active:
+                    request.state.user_id = user.id
+                    request.state.user_name = user.name
+                    request.state.is_admin = user.is_admin
+                    return await call_next(request)
 
         if path.startswith("/api"):
             return JSONResponse({"detail": "Nicht angemeldet."}, status_code=401)
 
         with SessionLocal() as db:
-            if not auth.password_is_set(db):
+            if not auth.users_exist(db):
                 return RedirectResponse("/setup", status_code=303)
         return RedirectResponse("/login", status_code=303)
 
@@ -49,6 +58,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # Alt-Installationen: Einzel-Passwort wird zum Benutzer "admin".
+    with SessionLocal() as db:
+        auth.migrate_legacy_password(db)
     stop_autosync = threading.Event()
     autosync.start(stop_autosync)
     yield
