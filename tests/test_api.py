@@ -43,3 +43,17 @@ def test_reconcile_endpoint(client):
     resp = client.post("/api/reconcile")
     assert resp.status_code == 200
     assert "Zuordnungen" in resp.json()["message"]
+
+
+def test_hotmail_preset(client):
+    resp = client.post(
+        "/api/accounts",
+        json={
+            "name": "Hotmail Konto",
+            "provider": "hotmail",
+            "username": "wer@hotmail.de",
+            "password": "app-passwort",
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["host"] == "outlook.office365.com"
