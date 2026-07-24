@@ -20,6 +20,7 @@ PROVIDERS: dict[str, Provider] = {
     "gmail": Provider("gmail", "Gmail", "imap.gmail.com", 993, True),
     "outlook": Provider("outlook", "Outlook / Office 365", "outlook.office365.com", 993, True),
     "hotmail": Provider("hotmail", "Hotmail / Live", "outlook.office365.com", 993, True),
+    "strato": Provider("strato", "STRATO", "imap.strato.de", 993, True),
     "custom": Provider("custom", "Anderer Anbieter", "", 993, True),
 }
 
