@@ -45,3 +45,36 @@
     select.addEventListener("change", applyPreset);
     applyPreset();
 })();
+
+// Passwort anzeigen/verbergen: Augen-Icon an allen Passwortfeldern.
+(function () {
+    const EYE =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const EYE_OFF =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="m3 3 18 18"/>' +
+        '<path d="M10.6 5.1C11 5 11.5 5 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.9 3.9M6.6 6.6C4 8.4 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.9-.8"/>' +
+        '<path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+
+    document.querySelectorAll('input[type="password"]').forEach(function (input) {
+        const wrap = document.createElement("span");
+        wrap.className = "pw-wrap";
+        input.parentNode.insertBefore(wrap, input);
+        wrap.appendChild(input);
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "pw-toggle";
+        btn.setAttribute("aria-label", "Passwort anzeigen");
+        btn.tabIndex = -1;
+        btn.innerHTML = EYE;
+        btn.addEventListener("click", function () {
+            const show = input.type === "password";
+            input.type = show ? "text" : "password";
+            btn.innerHTML = show ? EYE_OFF : EYE;
+            btn.setAttribute("aria-label", show ? "Passwort verbergen" : "Passwort anzeigen");
+        });
+        wrap.appendChild(btn);
+    });
+})();
