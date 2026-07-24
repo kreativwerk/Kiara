@@ -1,0 +1,20 @@
+# Zwei getrennte Kiara-Instanzen (Erst- und Zweitfirma) hinter einem Caddy.
+# Aktivierung über .env: CADDYFILE=Caddyfile.zwei + KIARA_DOMAIN2 + COMPOSE_PROFILES=zweitfirma
+
+{$KIARA_DOMAIN} {
+	reverse_proxy kiara:8000
+	encode gzip
+}
+
+www.{$KIARA_DOMAIN} {
+	redir https://{$KIARA_DOMAIN}{uri} permanent
+}
+
+{$KIARA_DOMAIN2} {
+	reverse_proxy kiara2:8000
+	encode gzip
+}
+
+www.{$KIARA_DOMAIN2} {
+	redir https://{$KIARA_DOMAIN2}{uri} permanent
+}

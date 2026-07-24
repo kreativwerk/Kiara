@@ -76,6 +76,28 @@ Schritt für Schritt von null:
 5. Im Browser das App-Passwort festlegen – fertig. Am Handy: Seite öffnen und
    „Zum Home-Bildschirm hinzufügen" → fühlt sich wie eine App an.
 
+### Zweite Firma (getrennte Instanz)
+
+Für ein weiteres Geschäft läuft auf demselben Server eine **komplett
+getrennte** zweite Kiara-Instanz: eigene Domain, eigenes Passwort, eigene
+Belege, Konten und Gegenkontrolle – nichts wird vermischt.
+
+1. **DNS**: A-Record für die zweite Adresse (z. B. `belege.zweitfirma.de`)
+   auf dieselbe Server-IP zeigen lassen.
+2. Auf dem Server die `.env` erweitern:
+
+   ```bash
+   KIARA_DOMAIN2=belege.zweitfirma.de
+   CADDYFILE=Caddyfile.zwei
+   COMPOSE_PROFILES=zweitfirma
+   ```
+
+3. Einmal `docker compose up -d` ausführen. Die zweite Instanz startet mit
+   eigenem Datenspeicher (`kiara2-data`); beim ersten Aufruf der neuen
+   Adresse wird ihr eigenes Passwort festgelegt.
+
+Automatische Updates gelten danach für beide Instanzen mit.
+
 ### Automatische Updates
 
 Einmalig auf dem Server einrichten, danach spielt sich jede neue offizielle
