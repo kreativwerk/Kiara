@@ -24,6 +24,9 @@
         outlook:
             "Outlook/Microsoft-Konten brauchen meist ein App-Passwort: " +
             "account.microsoft.com → Sicherheit → Zwei-Faktor aktivieren → App-Passwort erstellen.",
+        hotmail:
+            "Hotmail/Live sind Microsoft-Konten und brauchen meist ein App-Passwort: " +
+            "account.microsoft.com → Sicherheit → Zwei-Faktor aktivieren → App-Passwort erstellen.",
     };
 
     function applyPreset() {
