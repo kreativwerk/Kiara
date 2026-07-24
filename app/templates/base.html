@@ -5,14 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Kiara{% endblock %} · Kiara</title>
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 </head>
+{% from "_icons.html" import icon %}
 {% set authed = request.cookies.get('kiara_session') %}
 <body class="{{ 'app' if authed else 'anon' }}">
 
 {% if authed %}
 <aside class="sidebar">
     {# Logo-Platzhalter: wird durch das echte Kiara-Office-Logo ersetzt #}
-    <a class="brand" href="/"><span class="brand-logo">📎</span><span class="brand-name">Kiara</span></a>
+    <a class="brand" href="/"><span class="brand-logo">{{ icon('paperclip', 'icon brand-icon') }}</span><span class="brand-name">Kiara</span></a>
 
     <span class="nav-label">Navigation</span>
     <nav class="side-nav">
@@ -40,7 +42,7 @@
 
     <div class="sidebar-foot">
         {% if request.state.user_name %}
-        <span class="sidebar-user" title="Angemeldet als">👤 {{ request.state.user_name }}</span>
+        <span class="sidebar-user" title="Angemeldet als">{{ icon('user', 'icon icon-sm') }} {{ request.state.user_name }}</span>
         {% endif %}
         <form method="post" action="/logout">
             <button type="submit" class="logout-btn">
@@ -56,7 +58,8 @@
     {% if authed %}
     <header class="content-head">
         <form method="get" action="/search" class="topbar-search">
-            <input type="search" name="q" placeholder="🔍 Suchen … auch Beträge"
+            {{ icon('search', 'search-ico') }}
+            <input type="search" name="q" placeholder="Suchen … auch Beträge"
                    value="{{ request.query_params.get('q', '') if request.url.path == '/search' else '' }}">
         </form>
     </header>

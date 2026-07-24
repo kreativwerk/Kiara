@@ -125,9 +125,22 @@ body.app { display: flex; min-height: 100vh; }
 body.anon .content { border-radius: 0; background: var(--shell); }
 
 .content-head { display: flex; justify-content: flex-end; padding: 1.1rem 1.6rem 0; }
+
+/* Icon-Größen (Inline-SVGs aus _icons.html) */
+.icon { width: 18px; height: 18px; vertical-align: -4px; }
+.icon-sm { width: 15px; height: 15px; vertical-align: -3px; }
+.h-icon { width: 20px; height: 20px; vertical-align: -4px; margin-right: .45rem; color: var(--good); }
+.brand-icon { width: 19px; height: 19px; color: var(--shell); vertical-align: middle; }
+.sidebar-user .icon-sm { vertical-align: -2px; margin-right: .1rem; }
+
+.topbar-search { position: relative; }
+.topbar-search .search-ico {
+    position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+    width: 15px; height: 15px; color: var(--muted); pointer-events: none;
+}
 .topbar-search input {
     width: 250px;
-    padding: .55rem .95rem;
+    padding: .55rem .95rem .55rem 2.25rem;
     border: 1px solid var(--line); border-radius: 999px;
     background: var(--card); color: var(--ink); font-size: .9rem;
 }

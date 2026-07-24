@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Einrichtung{% endblock %}
+{% from "_icons.html" import icon %}
 {% block content %}
 <div class="auth-box card">
-    <h1>👋 Willkommen bei Kiara</h1>
+    <h1>{{ icon('user', 'h-icon') }}Willkommen bei Kiara</h1>
     <p class="muted">
         Lege das erste Benutzerkonto an – es ist automatisch das
         <strong>Administrator-Konto</strong>, mit dem du später weitere
