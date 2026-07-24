@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Gegenkontrolle{% endblock %}
+{% from "_icons.html" import icon %}
 {% block content %}
 <div class="page-head">
     <h1>Kontoauszug &amp; Gegenkontrolle</h1>
@@ -100,8 +101,8 @@
             </td>
             <td class="actions">
                 {% if m and not m.confirmed %}
-                <form method="post" action="/matches/{{ m.id }}/confirm"><button class="btn small primary" title="Zuordnung bestätigen">✓</button></form>
-                <form method="post" action="/matches/{{ m.id }}/delete"><button class="btn small danger" title="Zuordnung entfernen">✕</button></form>
+                <form method="post" action="/matches/{{ m.id }}/confirm"><button class="btn small primary" title="Zuordnung bestätigen">{{ icon('check', 'icon icon-sm') }}</button></form>
+                <form method="post" action="/matches/{{ m.id }}/delete"><button class="btn small danger" title="Zuordnung entfernen">{{ icon('x', 'icon icon-sm') }}</button></form>
                 <a class="btn small" href="/bank/assign/{{ t.id }}" title="Anderen Beleg wählen">ändern</a>
                 {% elif m and m.confirmed %}
                 <form method="post" action="/matches/{{ m.id }}/delete"><button class="btn small">lösen</button></form>

@@ -8,21 +8,21 @@
 
     const hints = {
         gmail:
-            "🔑 Gmail braucht ein App-Passwort (normale Passwörter blockiert Google): " +
+            "Gmail braucht ein App-Passwort (normale Passwörter blockiert Google): " +
             "1) Im Google-Konto die Bestätigung in zwei Schritten aktivieren. " +
             "2) Auf myaccount.google.com/apppasswords ein App-Passwort erstellen. " +
             "3) Dieses 16-stellige Passwort hier eintragen.",
         gmx:
-            "ℹ️ Bei GMX zuerst IMAP erlauben: GMX-Webmail → Einstellungen (Zahnrad) → " +
+            "Bei GMX zuerst IMAP erlauben: GMX-Webmail → Einstellungen (Zahnrad) → " +
             "POP3/IMAP → POP3 und IMAP Zugriff erlauben aktivieren. " +
             "Mit Zwei-Faktor-Anmeldung: anwendungsspezifisches Passwort erstellen.",
         webde:
-            "ℹ️ Bei WEB.DE zuerst IMAP erlauben: Webmail → Einstellungen → POP3/IMAP aktivieren.",
+            "Bei WEB.DE zuerst IMAP erlauben: Webmail → Einstellungen → POP3/IMAP aktivieren.",
         ionos:
-            "ℹ️ Das Postfach-Passwort verwenden (das aus Webmail/Apple Mail), " +
+            "Das Postfach-Passwort verwenden (das aus Webmail/Apple Mail), " +
             "nicht das IONOS-Kundenkonto-Passwort.",
         outlook:
-            "🔑 Outlook/Microsoft-Konten brauchen meist ein App-Passwort: " +
+            "Outlook/Microsoft-Konten brauchen meist ein App-Passwort: " +
             "account.microsoft.com → Sicherheit → Zwei-Faktor aktivieren → App-Passwort erstellen.",
     };
 

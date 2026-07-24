@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Einstellungen{% endblock %}
+{% from "_icons.html" import icon %}
 {% block content %}
 <div class="page-head"><h1>Einstellungen</h1></div>
 
 <section class="card">
-    <h2>📖 Texterkennung (OCR)</h2>
+    <h2>{{ icon('scan', 'h-icon') }}Texterkennung (OCR)</h2>
     <p class="muted">
         Liest gescannte Belege und Foto-Anhänge (JPG, PNG, HEIC …), damit sie in der
         Suche auftauchen und Beträge erkannt werden.
@@ -26,7 +27,7 @@
 
 {% if me and me.is_admin %}
 <section class="card">
-    <h2>👥 Benutzer</h2>
+    <h2>{{ icon('users', 'h-icon') }}Benutzer</h2>
     <p class="muted">
         Benutzerkonten legt nur ein Administrator an – es gibt keine
         Selbstregistrierung. Jeder Benutzer meldet sich mit eigener E-Mail und
@@ -82,7 +83,7 @@
 {% endif %}
 
 <section class="card">
-    <h2>🔑 Eigenes Passwort ändern</h2>
+    <h2>{{ icon('key', 'h-icon') }}Eigenes Passwort ändern</h2>
     <form method="post" action="/settings/password" class="form-grid">
         <label>Neues Passwort (mind. 8 Zeichen)
             <input type="password" name="password" minlength="8" required>
@@ -97,7 +98,7 @@
 </section>
 
 <section class="card">
-    <h2>🧮 Wartung</h2>
+    <h2>{{ icon('wrench', 'h-icon') }}Wartung</h2>
     <p class="muted">
         Beträge aller Belege mit der aktuellen Endbetrag-Erkennung neu berechnen
         (sinnvoll nach Updates der Erkennungslogik). Die Gegenkontrolle wird danach
@@ -109,7 +110,7 @@
 </section>
 
 <section class="card">
-    <h2>☁️ Google Drive (optional)</h2>
+    <h2>{{ icon('cloud', 'h-icon') }}Google Drive (optional)</h2>
     <p class="muted">
         Spiegelt dein Belegarchiv zusätzlich nach Google Drive – gleiche Ordnerstruktur
         (Konto/Jahr/Monat). So hast du alle Belege auch unterwegs in der Drive-App dabei.

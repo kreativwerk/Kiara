@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Übersicht{% endblock %}
+{% from "_icons.html" import icon %}
 {% block content %}
 <div class="page-head">
     <h1>Übersicht</h1>
@@ -89,7 +90,7 @@
             <td><span class="tag tag-{{ att.category }}">{{ att.category }}</span></td>
             <td>{{ att.month | monthname }} {{ att.year or '' }}</td>
             <td class="right">{{ att.detected_amount | euro }}</td>
-            <td><a href="/attachments/{{ att.id }}/download">↓</a></td>
+            <td><a href="/attachments/{{ att.id }}/download" title="Herunterladen">{{ icon('download', 'icon icon-sm') }}</a></td>
         </tr>
         {% endfor %}
         </tbody>
