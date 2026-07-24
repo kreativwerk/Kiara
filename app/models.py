@@ -36,6 +36,8 @@ class EmailAccount(Base):
     username: Mapped[str] = mapped_column(String(255))
     password_enc: Mapped[str] = mapped_column(Text)
     folders: Mapped[str] = mapped_column(String(255), default="INBOX")
+    # Nur E-Mails ab diesem Datum synchronisieren (leer = komplette Historie).
+    sync_since: Mapped[date | None] = mapped_column(Date, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -83,6 +83,7 @@ def create_account(payload: AccountCreate, request: Request, db: Session = Depen
         username=payload.username,
         password_enc=encrypt(payload.password),
         folders=payload.folders or "INBOX",
+        sync_since=payload.sync_since,
     )
     db.add(account)
     db.commit()

@@ -9,7 +9,7 @@ import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date as date_type, datetime, timezone
 from email.header import decode_header, make_header
 from email.message import Message
 from email.utils import getaddresses, parsedate_to_datetime
@@ -311,11 +311,21 @@ def _parse_date(msg: Message) -> datetime | None:
     return dt
 
 
+# IMAP-Datumsformat ist locale-unabhängig englisch: 01-Jan-2026
+_IMAP_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _imap_date(value: date_type) -> str:
+    return f"{value.day:02d}-{_IMAP_MONTHS[value.month - 1]}-{value.year}"
+
+
 def fetch_messages(
     conn,
     folder: str,
     since_uid: int = 0,
     limit: int = 0,
+    since_date: date_type | None = None,
 ) -> Iterator[FetchedMessage]:
     """Iteriert über Nachrichten in ``folder`` mit UID größer als ``since_uid``.
 
@@ -331,7 +341,10 @@ def fetch_messages(
         log.warning("Ordner konnte nicht geöffnet werden: %s", folder)
         return
 
-    typ, data = conn.uid("search", None, "ALL")
+    if since_date is not None:
+        typ, data = conn.uid("search", None, "SINCE", _imap_date(since_date))
+    else:
+        typ, data = conn.uid("search", None, "ALL")
     if typ != "OK" or not data or not data[0]:
         return
 
