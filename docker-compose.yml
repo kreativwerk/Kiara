@@ -5,6 +5,17 @@
 #   3. docker compose up -d
 #
 # Ohne KIARA_DOMAIN lauscht Caddy auf "localhost" (Selbsttest).
+#
+# ---------------------------------------------------------------------------
+# Zweite Firma (komplett getrennte Instanz: eigene Domain, eigene Daten,
+# eigenes Passwort) - in der .env zusätzlich setzen:
+#
+#   KIARA_DOMAIN2=belege.zweitfirma.de
+#   CADDYFILE=Caddyfile.zwei
+#   COMPOSE_PROFILES=zweitfirma
+#
+# danach einmal: docker compose up -d
+# ---------------------------------------------------------------------------
 
 services:
   kiara:
@@ -15,6 +26,16 @@ services:
     volumes:
       - kiara-data:/data
 
+  # Zweite, unabhängige Instanz (nur mit Profil "zweitfirma" aktiv).
+  kiara2:
+    build: .
+    restart: unless-stopped
+    profiles: ["zweitfirma"]
+    environment:
+      KIARA_SECURE_COOKIES: "true"
+    volumes:
+      - kiara2-data:/data
+
   caddy:
     image: caddy:2
     restart: unless-stopped
@@ -23,8 +44,9 @@ services:
       - "443:443"
     environment:
       KIARA_DOMAIN: ${KIARA_DOMAIN:-localhost}
+      KIARA_DOMAIN2: ${KIARA_DOMAIN2:-}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./${CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
@@ -32,5 +54,6 @@ services:
 
 volumes:
   kiara-data:
+  kiara2-data:
   caddy-data:
   caddy-config:
