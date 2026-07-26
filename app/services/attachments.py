@@ -11,7 +11,7 @@ from pathlib import Path
 from ..categorize import categorize
 from ..config import get_settings
 from . import ocr
-from .text_utils import detect_total_amount, safe_filename, slugify
+from .text_utils import detect_invoice_number, detect_total_amount, safe_filename, slugify
 
 log = logging.getLogger("kiara.attachments")
 
@@ -34,6 +34,7 @@ class StoredFile:
     month: int
     category: str
     detected_amount: Decimal | None
+    invoice_number: str | None
     text_content: str | None
 
 
@@ -112,6 +113,7 @@ def store_attachment(
     category = categorize(clean_name, subject)
     text_content = extract_text(stored_path)
     detected_amount = detect_total_amount(text_content) if text_content else None
+    invoice_number = detect_invoice_number(text_content) if text_content else None
 
     return StoredFile(
         sha256=sha256,
@@ -122,5 +124,6 @@ def store_attachment(
         month=when.month,
         category=category,
         detected_amount=detected_amount,
+        invoice_number=invoice_number,
         text_content=text_content,
     )

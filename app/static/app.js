@@ -49,6 +49,53 @@
     applyPreset();
 })();
 
+// Beleg-Vorschau: PDF/Bild im Overlay ansehen statt direkt herunterzuladen.
+// Auf kleinen Bildschirmen öffnet der Link stattdessen einen neuen Tab.
+(function () {
+    const links = document.querySelectorAll("a[data-preview]");
+    if (!links.length) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "preview-overlay";
+    overlay.innerHTML =
+        '<div class="preview-box">' +
+        '<div class="preview-head">' +
+        '<span class="preview-title"></span>' +
+        '<a class="btn small preview-download" href="#">Herunterladen</a>' +
+        '<button type="button" class="btn small preview-close">Schließen</button>' +
+        "</div>" +
+        '<iframe class="preview-frame" title="Beleg-Vorschau"></iframe>' +
+        "</div>";
+    document.body.appendChild(overlay);
+
+    const frame = overlay.querySelector(".preview-frame");
+    const title = overlay.querySelector(".preview-title");
+    const download = overlay.querySelector(".preview-download");
+
+    function closePreview() {
+        overlay.classList.remove("open");
+        frame.src = "about:blank";
+    }
+    overlay.addEventListener("click", function (event) {
+        if (event.target === overlay) closePreview();
+    });
+    overlay.querySelector(".preview-close").addEventListener("click", closePreview);
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") closePreview();
+    });
+
+    links.forEach(function (link) {
+        link.addEventListener("click", function (event) {
+            if (window.matchMedia("(max-width: 860px)").matches) return;
+            event.preventDefault();
+            title.textContent = link.getAttribute("data-title") || "Beleg";
+            download.href = link.getAttribute("data-download") || link.href;
+            frame.src = link.href;
+            overlay.classList.add("open");
+        });
+    });
+})();
+
 // Passwort anzeigen/verbergen: Augen-Icon an allen Passwortfeldern.
 (function () {
     const EYE =

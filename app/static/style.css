@@ -236,6 +236,23 @@ body.anon .footer { color: var(--shell-ink); opacity: .7; }
 .small { font-size: .85rem; }
 .snippet { color: var(--muted); font-style: italic; }
 
+/* Kompakte Beleg-Liste: Unternehmen, Betrag, Datum, Rechnungsnr., Kategorie */
+.table-belege td { word-break: break-word; }
+.table-belege .c-vendor a {
+    color: var(--ink); font-weight: 600; text-decoration: none;
+}
+.table-belege .c-vendor a:hover { color: var(--primary); text-decoration: underline; }
+.table-belege .c-amount { font-weight: 600; white-space: nowrap; }
+.table-belege .c-date, .table-belege .c-invoice { color: var(--muted); font-size: .88rem; }
+.table-belege .c-act { white-space: nowrap; text-align: right; }
+
+.icon-btn {
+    display: inline-grid; place-items: center;
+    padding: .3rem; border-radius: 8px;
+    color: var(--muted);
+}
+.icon-btn:hover { color: var(--ink); background: var(--card-soft); }
+
 /* =============================== Buttons =============================== */
 
 .btn {
@@ -381,7 +398,48 @@ body.anon .container { display: grid; place-items: center; min-height: 72vh; }
     .card.stat { min-width: 104px; padding: .8rem .9rem; }
     .card.stat .num { font-size: 1.45rem; }
     .search-form { flex-direction: column; }
+
+    /* Beleg-Liste gestapelt statt breiter Tabelle: kein seitliches Scrollen. */
+    .table-belege thead { display: none; }
+    .table-belege tr {
+        display: grid; grid-template-columns: 1fr auto;
+        gap: .1rem .7rem; padding: .65rem 0;
+        border-bottom: 1px solid var(--line);
+    }
+    .table-belege tr:last-child { border-bottom: none; }
+    .table-belege td { display: block; padding: 0; border: none; }
+    .table-belege td.c-vendor { grid-column: 1; grid-row: 1; }
+    .table-belege td.c-amount { grid-column: 2; grid-row: 1; text-align: right; font-weight: 700; }
+    .table-belege td.c-invoice { text-align: right; }
+    .table-belege td.c-invoice.has-inv::before { content: "Nr. "; }
+    .table-belege td.c-invoice:not(.has-inv) { visibility: hidden; }
+    .table-belege td.c-act { grid-column: 2; justify-self: end; display: flex; gap: .35rem; }
 }
+
+/* ============================ Beleg-Vorschau =========================== */
+
+.preview-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(10, 25, 19, .55);
+    display: none; align-items: center; justify-content: center;
+    padding: 1.5rem;
+}
+.preview-overlay.open { display: flex; }
+.preview-box {
+    background: var(--card); border-radius: var(--radius);
+    width: min(900px, 100%); height: min(88vh, 1000px);
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: var(--shadow);
+}
+.preview-head {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .7rem .9rem; border-bottom: 1px solid var(--line);
+}
+.preview-title {
+    font-weight: 700; flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.preview-frame { flex: 1; border: none; width: 100%; background: var(--card-soft); }
 
 /* Passwort anzeigen/verbergen (Augen-Icon) */
 .pw-wrap { position: relative; display: flex; width: 100%; }

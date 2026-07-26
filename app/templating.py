@@ -38,6 +38,18 @@ def monthname(month: int | None) -> str:
     return _MONTHS_DE[month]
 
 
+def vendor(attachment) -> str:
+    """Unternehmens-Name eines Belegs (aus Absender, Betreff oder Dateiname)."""
+    from .services.text_utils import vendor_label
+
+    return vendor_label(
+        getattr(attachment, "sender_email", None),
+        getattr(attachment, "subject", None),
+        getattr(attachment, "filename", None),
+    )
+
+
 templates.env.filters["euro"] = euro
 templates.env.filters["datefmt"] = datefmt
 templates.env.filters["monthname"] = monthname
+templates.env.filters["vendor"] = vendor
