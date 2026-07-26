@@ -100,6 +100,8 @@ class Attachment(Base):
     month: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     category: Mapped[str] = mapped_column(String(40), default="sonstiges", index=True)
     detected_amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    # Aus dem Dokumenttext erkannte Rechnungs-/Belegnummer.
+    invoice_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
     sender_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     subject: Mapped[str | None] = mapped_column(Text, nullable=True)
     drive_file_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

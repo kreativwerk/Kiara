@@ -394,6 +394,7 @@ async def upload_attachments(
                 month=stored.month,
                 category=stored.category,
                 detected_amount=stored.detected_amount,
+                invoice_number=stored.invoice_number,
                 text_content=stored.text_content,
             )
         )
@@ -498,36 +499,11 @@ def attachments_page(
     )
 
 
-# Freemail-Domains taugen nicht als Gläubiger-Name.
-_FREEMAIL_DOMAINS = {
-    "gmail", "googlemail", "gmx", "web", "t-online", "outlook", "hotmail",
-    "yahoo", "icloud", "aol", "freenet", "posteo", "protonmail", "mail",
-    "live", "arcor", "online",
-}
-_VENDOR_STOPWORDS = {
-    "rechnung", "invoice", "ihre", "your", "beleg", "scan", "dokument",
-    "document", "mahnung", "info", "neue", "vom", "kontoauszug",
-}
-
-
 def _vendor_label(attachment: Attachment) -> str:
-    """Gläubiger-Name für den Dateinamen: Absender-Domain, sonst Betreff/Datei."""
-    email_addr = (attachment.sender_email or "").lower()
-    if "@" in email_addr:
-        parts = email_addr.split("@", 1)[1].split(".")
-        if len(parts) >= 2:
-            label = parts[-2]
-            if label in {"co", "com", "gov"} and len(parts) >= 3:
-                label = parts[-3]
-            if label and label not in _FREEMAIL_DOMAINS:
-                return label.capitalize()
-    import re as _re
+    """Gläubiger-/Unternehmens-Name: Absender-Domain, sonst Betreff/Datei."""
+    from ..services.text_utils import vendor_label
 
-    for source in (attachment.subject or "", attachment.filename or ""):
-        for word in _re.findall(r"[A-Za-zÄÖÜäöüß]{3,}", source):
-            if word.lower() not in _VENDOR_STOPWORDS:
-                return word.capitalize()
-    return "Beleg"
+    return vendor_label(attachment.sender_email, attachment.subject, attachment.filename)
 
 
 def _download_name(attachment: Attachment) -> str:
@@ -543,6 +519,33 @@ def _download_name(attachment: Attachment) -> str:
     vendor = safe_filename(_vendor_label(attachment), fallback="Beleg")
     extension = Path(attachment.filename).suffix or ".pdf"
     return f"{amount}_{vendor}{extension}"
+
+
+@router.get("/attachments/{attachment_id}/view")
+def view_attachment(attachment_id: int, request: Request, db: Session = Depends(get_db)):
+    """Vorschau im Browser (inline) statt Download – für PDF und Bilder."""
+    attachment = db.get(Attachment, attachment_id)
+    if not attachment or attachment.org_id != _org(request):
+        return _redirect("/attachments", "Anhang nicht gefunden.", error=True)
+    settings = get_settings()
+    full_path = settings.data_dir / attachment.stored_path
+    if not full_path.exists():
+        return _redirect("/attachments", "Datei nicht mehr vorhanden.", error=True)
+    import mimetypes
+
+    # Der Browser rendert nur mit korrektem Typ inline; E-Mail-Anhänge kommen
+    # oft als "application/octet-stream" an, daher zuerst am Dateinamen raten.
+    media_type = (
+        mimetypes.guess_type(attachment.filename)[0]
+        or attachment.content_type
+        or "application/octet-stream"
+    )
+    return FileResponse(
+        str(full_path),
+        filename=_download_name(attachment),
+        media_type=media_type,
+        content_disposition_type="inline",
+    )
 
 
 @router.get("/attachments/{attachment_id}/download")
@@ -1067,8 +1070,8 @@ def toggle_drive(db: Session = Depends(get_db), enabled: bool = Form(False)):
 
 @router.post("/settings/recalculate-amounts")
 def recalculate_amounts(request: Request, db: Session = Depends(get_db)):
-    """Beträge aller Belege mit der aktuellen Endbetrag-Logik neu berechnen."""
-    from ..services.text_utils import detect_total_amount
+    """Beträge und Rechnungsnummern aller Belege neu aus dem Text erkennen."""
+    from ..services.text_utils import detect_invoice_number, detect_total_amount
 
     attachments = db.execute(
         select(Attachment).where(
@@ -1078,18 +1081,25 @@ def recalculate_amounts(request: Request, db: Session = Depends(get_db)):
     ).scalars().all()
     changed = 0
     for att in attachments:
+        touched = False
         new_amount = detect_total_amount(att.text_content)
         if new_amount != att.detected_amount:
             att.detected_amount = new_amount
+            touched = True
+        new_number = detect_invoice_number(att.text_content)
+        if new_number and new_number != att.invoice_number:
+            att.invoice_number = new_number
+            touched = True
+        if touched:
             changed += 1
     db.commit()
     if changed:
         matching.reconcile(db, _org(request))
     return _redirect(
         "/settings",
-        f"Beträge neu erkannt: {changed} von {len(attachments)} Belegen korrigiert, "
-        "Gegenkontrolle aktualisiert." if changed else
-        f"Beträge geprüft: alle {len(attachments)} Belege waren schon korrekt.",
+        f"Neu erkannt: {changed} von {len(attachments)} Belegen aktualisiert "
+        "(Beträge & Rechnungsnummern), Gegenkontrolle aktualisiert." if changed else
+        f"Alles geprüft: alle {len(attachments)} Belege waren schon korrekt.",
     )
 
 

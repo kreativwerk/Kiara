@@ -81,16 +81,25 @@
 <section class="card">
     <h2>Zuletzt archivierte Belege</h2>
     {% if recent %}
-    <table class="table">
-        <thead><tr><th>Datei</th><th>Kategorie</th><th>Zeitraum</th><th class="right">Betrag</th><th></th></tr></thead>
+    <table class="table table-belege">
+        <thead><tr><th>Unternehmen</th><th class="right">Betrag</th><th>Datum</th><th>Kategorie</th><th></th></tr></thead>
         <tbody>
         {% for att in recent %}
         <tr>
-            <td>{{ att.filename }}</td>
-            <td><span class="tag tag-{{ att.category }}">{{ att.category }}</span></td>
-            <td>{{ att.month | monthname }} {{ att.year or '' }}</td>
-            <td class="right">{{ att.detected_amount | euro }}</td>
-            <td><a href="/attachments/{{ att.id }}/download" title="Herunterladen">{{ icon('download', 'icon icon-sm') }}</a></td>
+            <td class="c-vendor">
+                <a href="/attachments/{{ att.id }}/view" target="_blank" rel="noopener"
+                   data-preview data-title="{{ att | vendor }}"
+                   data-download="/attachments/{{ att.id }}/download">{{ att | vendor }}</a>
+            </td>
+            <td class="c-amount right">{{ att.detected_amount | euro }}</td>
+            <td class="c-date">{{ att.month | monthname }} {{ att.year or '' }}</td>
+            <td class="c-cat"><span class="tag tag-{{ att.category }}">{{ att.category }}</span></td>
+            <td class="c-act">
+                <a class="icon-btn" href="/attachments/{{ att.id }}/view" target="_blank" rel="noopener"
+                   title="Vorschau" data-preview data-title="{{ att | vendor }}"
+                   data-download="/attachments/{{ att.id }}/download">{{ icon('eye', 'icon icon-sm') }}</a>
+                <a class="icon-btn" href="/attachments/{{ att.id }}/download" title="Herunterladen">{{ icon('download', 'icon icon-sm') }}</a>
+            </td>
         </tr>
         {% endfor %}
         </tbody>

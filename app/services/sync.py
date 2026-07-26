@@ -205,6 +205,7 @@ def _do_sync(db: Session, account: EmailAccount, max_fetch: int | None = None) -
                                     month=stored.month,
                                     category=stored.category,
                                     detected_amount=stored.detected_amount,
+                                    invoice_number=stored.invoice_number,
                                     text_content=stored.text_content,
                                     sender_email=msg.sender_email,
                                     subject=msg.subject,
