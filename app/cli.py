@@ -102,6 +102,55 @@ def cmd_add_account(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_list_users(args: argparse.Namespace) -> int:
+    """Alle Benutzer anzeigen (Anmeldename, Rolle, Organisation) – Rettungsanker,
+    wenn jemand seinen Anmeldenamen vergessen hat."""
+    from .models import Organization, User
+
+    init_db()
+    with SessionLocal() as db:
+        orgs = {o.id: o.name for o in db.query(Organization).all()}
+        users = db.query(User).order_by(User.id).all()
+        if not users:
+            print("Keine Benutzer vorhanden.")
+            return 0
+        for u in users:
+            role = "Betreiber" if u.is_owner else ("Administrator" if u.is_admin else "Benutzer")
+            status = "aktiv" if u.active else "deaktiviert"
+            org = orgs.get(u.org_id, "-")
+            print(f"{u.email}  ({u.name} | {role} | {status} | Organisation: {org})")
+    return 0
+
+
+def cmd_reset_password(args: argparse.Namespace) -> int:
+    """Passwort eines Benutzers neu setzen – Rettungsanker bei Aussperrung."""
+    from . import auth
+    from .models import User
+
+    if len(args.password) < auth.MIN_PASSWORD_LENGTH:
+        print(
+            f"Fehler: Passwort braucht mindestens {auth.MIN_PASSWORD_LENGTH} Zeichen.",
+            file=sys.stderr,
+        )
+        return 1
+    init_db()
+    with SessionLocal() as db:
+        user = db.query(User).filter(
+            User.email == auth.normalize_email(args.email)
+        ).one_or_none()
+        if user is None:
+            print(f"Fehler: Kein Benutzer mit der E-Mail '{args.email}'.", file=sys.stderr)
+            print("Vorhandene Benutzer zeigt: python -m app.cli list-users", file=sys.stderr)
+            return 1
+        auth.set_password_for(db, user, args.password)
+        if not user.active:
+            user.active = True
+            db.commit()
+            print(f"Benutzer '{user.email}' war deaktiviert und wurde wieder aktiviert.")
+        print(f"Neues Passwort für '{user.email}' gesetzt – Anmeldung sofort möglich.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kiara", description="Kiara Belegarchiv CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -111,6 +160,15 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "index", help="PDF-Volltext für ältere Belege nachindexieren (für die Suche)"
     ).set_defaults(func=cmd_index)
+
+    sub.add_parser(
+        "list-users", help="Alle Benutzer anzeigen (Anmeldename/Rolle/Organisation)"
+    ).set_defaults(func=cmd_list_users)
+
+    reset = sub.add_parser("reset-password", help="Passwort eines Benutzers neu setzen")
+    reset.add_argument("email", help="Anmelde-E-Mail des Benutzers")
+    reset.add_argument("password", help="Neues Passwort (mind. 8 Zeichen)")
+    reset.set_defaults(func=cmd_reset_password)
 
     add = sub.add_parser("add-account", help="Konto anlegen")
     add.add_argument("--name", required=True)

@@ -105,6 +105,13 @@
                       onsubmit="return confirm('Benutzer {{ u.name }} wirklich löschen?');">
                     <button class="btn small danger">Löschen</button>
                 </form>
+                {% if not u.is_owner or me.is_owner %}
+                <form method="post" action="/settings/users/{{ u.id }}/password" class="pw-reset">
+                    <input type="password" name="password" minlength="8" required
+                           placeholder="Neues Passwort" autocomplete="new-password">
+                    <button class="btn small">Zurücksetzen</button>
+                </form>
+                {% endif %}
                 {% endif %}
             </td>
         </tr>

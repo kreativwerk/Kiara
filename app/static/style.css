@@ -272,6 +272,12 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 
 .actions { display: flex; gap: .4rem; flex-wrap: wrap; }
 .actions form { margin: 0; }
+.pw-reset { display: flex; gap: .3rem; align-items: center; }
+.pw-reset input {
+    width: 150px; padding: .32rem .55rem;
+    border: 1px solid var(--line); border-radius: 8px;
+    font-size: .8rem; background: var(--card); color: var(--ink);
+}
 
 /* ============================== Formulare ============================== */
 
