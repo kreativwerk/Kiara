@@ -1039,6 +1039,18 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
     if me and me.is_owner:
         orgs = db.execute(select(Organization).order_by(Organization.name)).scalars().all()
         org_names = {o.id: o.name for o in orgs}
+
+    from ..services import mailer
+
+    mail_account = None
+    mail_accounts = []
+    if me and me.is_owner:
+        mail_account = mailer.get_mail_account(db)
+        mail_accounts = db.execute(
+            select(EmailAccount)
+            .where(EmailAccount.provider != "manuell")
+            .order_by(EmailAccount.name)
+        ).scalars().all()
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -1050,10 +1062,65 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
             "users": users,
             "orgs": orgs,
             "org_names": org_names,
+            "mail_account": mail_account,
+            "mail_accounts": mail_accounts,
             "msg": request.query_params.get("msg"),
             "error": request.query_params.get("error"),
         },
     )
+
+
+@router.post("/settings/mail")
+def set_mail_account(
+    request: Request,
+    db: Session = Depends(get_db),
+    account_id: int = Form(0),
+):
+    """Betreiber wählt das Absender-Konto für System-E-Mails (Passwort vergessen)."""
+    actor = _current_user(request, db)
+    if not actor or not actor.is_owner:
+        return _redirect("/settings", "Nur der Betreiber darf das Absender-Konto wählen.", error=True)
+    from ..services import mailer
+
+    if not account_id:
+        store.delete(db, mailer.MAIL_ACCOUNT_KEY)
+        return _redirect("/settings", "System-E-Mails deaktiviert (kein Absender-Konto).")
+    account = db.get(EmailAccount, account_id)
+    if account is None or account.provider == "manuell":
+        return _redirect("/settings", "Konto nicht gefunden.", error=True)
+    store.set_value(db, mailer.MAIL_ACCOUNT_KEY, str(account.id))
+    return _redirect(
+        "/settings",
+        f"System-E-Mails werden jetzt über '{account.name}' versendet. "
+        "Am besten gleich mit einer Test-E-Mail prüfen.",
+    )
+
+
+@router.post("/settings/mail/test")
+def send_test_mail(request: Request, db: Session = Depends(get_db)):
+    """Schickt dem angemeldeten Betreiber eine Test-E-Mail."""
+    actor = _current_user(request, db)
+    if not actor or not actor.is_owner:
+        return _redirect("/settings", "Nur der Betreiber darf Test-E-Mails senden.", error=True)
+    if "@" not in actor.email:
+        return _redirect(
+            "/settings",
+            "Dein Anmeldename ist keine E-Mail-Adresse – Test nicht möglich.",
+            error=True,
+        )
+    from ..services import mailer
+
+    try:
+        mailer.send_mail(
+            db,
+            actor.email,
+            "Kiara: Test-E-Mail",
+            "Der E-Mail-Versand von Kiara funktioniert. "
+            "Damit klappt auch 'Passwort vergessen' auf der Anmeldeseite.",
+        )
+    except RuntimeError as exc:
+        return _redirect("/settings", str(exc), error=True)
+    return _redirect("/settings", f"Test-E-Mail an {actor.email} verschickt – bitte Posteingang prüfen.")
 
 
 @router.post("/settings/drive/client-secret")

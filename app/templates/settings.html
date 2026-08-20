@@ -77,6 +77,36 @@
 </section>
 {% endif %}
 
+{% if me and me.is_owner %}
+<section class="card">
+    <h2>{{ icon('key', 'h-icon') }}System-E-Mails (Passwort vergessen)</h2>
+    <p class="muted">
+        Damit „Passwort vergessen?" auf der Anmeldeseite funktioniert, verschickt
+        Kiara den Zurücksetz-Link über eines deiner verbundenen E-Mail-Konten –
+        einfach ein Absender-Konto wählen, weitere Zugangsdaten braucht es nicht.
+    </p>
+    <div class="drive-status">
+        <span class="badge {{ 'ok' if mail_account else 'err' }}">
+            {{ 'aktiv über ' + mail_account.name if mail_account else 'nicht eingerichtet' }}
+        </span>
+    </div>
+    <form method="post" action="/settings/mail" class="inline-form">
+        <select name="account_id">
+            <option value="0">– kein Versand (deaktiviert) –</option>
+            {% for a in mail_accounts %}
+            <option value="{{ a.id }}" {{ 'selected' if mail_account and mail_account.id == a.id else '' }}>
+                {{ a.name }} ({{ a.username }})
+            </option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn">Speichern</button>
+    </form>
+    <form method="post" action="/settings/mail/test" class="inline-form">
+        <button type="submit" class="btn" {{ 'disabled' if not mail_account else '' }}>Test-E-Mail an mich senden</button>
+    </form>
+</section>
+{% endif %}
+
 {% if me and me.is_admin %}
 <section class="card">
     <h2>{{ icon('users', 'h-icon') }}Benutzer</h2>

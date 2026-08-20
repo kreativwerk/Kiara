@@ -285,7 +285,8 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .form-grid.single { grid-template-columns: 1fr; }
 .form-grid label { display: flex; flex-direction: column; font-size: .83rem; font-weight: 600; color: var(--muted); gap: .35rem; }
 .form-grid label.checkbox { flex-direction: row; align-items: center; gap: .5rem; }
-.form-grid input, .form-grid select, .filter-bar input, .filter-bar select {
+.form-grid input, .form-grid select, .filter-bar input, .filter-bar select,
+.inline-form select {
     padding: .6rem .75rem; border: 1px solid var(--line); border-radius: 10px;
     font-size: .95rem; color: var(--ink); background: var(--card); font-weight: 400;
 }

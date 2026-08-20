@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Passwort vergessen{% endblock %}
+{% from "_icons.html" import icon %}
+{% block content %}
+<div class="auth-box card">
+    <h1>{{ icon('key', 'h-icon') }}Passwort vergessen</h1>
+    {% if mail_ready %}
+    <p class="muted small">
+        Gib deine Anmelde-E-Mail-Adresse ein. Du bekommst einen Link zugeschickt,
+        mit dem du ein neues Passwort setzen kannst (gültig für 1 Stunde).
+    </p>
+    <form method="post" action="/forgot" class="form-grid single">
+        <label>E-Mail-Adresse
+            <input type="email" name="email" autofocus required
+                   autocomplete="username" placeholder="name@firma.de">
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="btn primary">Link zusenden</button>
+        </div>
+    </form>
+    {% else %}
+    <p class="muted">
+        Der E-Mail-Versand ist auf diesem System noch nicht eingerichtet.
+        Bitte wende dich an deinen Administrator – er kann dein Passwort
+        unter Einstellungen &rarr; Benutzer zurücksetzen.
+    </p>
+    {% endif %}
+    <p class="muted small"><a href="/login">Zurück zur Anmeldung</a></p>
+</div>
+{% endblock %}
