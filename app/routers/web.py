@@ -873,6 +873,41 @@ def toggle_user(user_id: int, request: Request, db: Session = Depends(get_db)):
     return _redirect("/settings", f"Benutzer '{user.name}' {state}.")
 
 
+@router.post("/settings/users/{user_id}/password")
+def reset_user_password(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    password: str = Form(...),
+):
+    """Administrator setzt ein neues Passwort für einen Benutzer (z.B. vergessen)."""
+    from .. import auth as auth_module
+    from ..models import User
+
+    actor = _current_user(request, db)
+    if not actor or not actor.is_admin:
+        return _redirect("/settings", "Nur Administratoren dürfen Passwörter zurücksetzen.", error=True)
+    user = db.get(User, user_id)
+    if not user or (not actor.is_owner and user.org_id != actor.org_id):
+        return _redirect("/settings", "Benutzer nicht gefunden.", error=True)
+    if user.id == actor.id:
+        return _redirect(
+            "/settings",
+            "Dein eigenes Passwort änderst du weiter unten unter 'Eigenes Passwort ändern'.",
+            error=True,
+        )
+    if user.is_owner and not actor.is_owner:
+        return _redirect("/settings", "Der Betreiber kann nicht verwaltet werden.", error=True)
+    if len(password) < auth_module.MIN_PASSWORD_LENGTH:
+        return _redirect(
+            "/settings",
+            f"Passwort braucht mindestens {auth_module.MIN_PASSWORD_LENGTH} Zeichen.",
+            error=True,
+        )
+    auth_module.set_password_for(db, user, password)
+    return _redirect("/settings", f"Neues Passwort für '{user.name}' gesetzt – bitte der Person mitteilen.")
+
+
 @router.post("/settings/users/{user_id}/delete")
 def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
     from ..models import User
