@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO)
 BASE_DIR = Path(__file__).resolve().parent
 
 # Ohne Anmeldung erreichbar: Login/Setup, statische Dateien, Health-Check.
-PUBLIC_PATHS = {"/health", "/login", "/setup"}
+PUBLIC_PATHS = {"/health", "/login", "/setup", "/forgot", "/reset"}
 PUBLIC_PREFIXES = ("/static/",)
 
 

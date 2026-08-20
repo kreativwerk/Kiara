@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Neues Passwort{% endblock %}
+{% from "_icons.html" import icon %}
+{% block content %}
+<div class="auth-box card">
+    <h1>{{ icon('key', 'h-icon') }}Neues Passwort setzen</h1>
+    <p class="muted small">Für das Konto <strong>{{ user.email }}</strong>.</p>
+    <form method="post" action="/reset" class="form-grid single">
+        <input type="hidden" name="token" value="{{ token }}">
+        <label>Neues Passwort (mind. 8 Zeichen)
+            <input type="password" name="password" minlength="8" required
+                   autofocus autocomplete="new-password">
+        </label>
+        <label>Wiederholen
+            <input type="password" name="password2" minlength="8" required
+                   autocomplete="new-password">
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="btn primary">Passwort speichern</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -176,6 +176,43 @@ def ensure_default_org(db: Session) -> None:
 # ---------------------------------------------------------------------------
 
 
+RESET_TOKEN_MAX_AGE = 3600  # Zurücksetz-Link gilt 1 Stunde
+
+
+def create_reset_token(user: User) -> str:
+    """Einmal-Link-Token für 'Passwort vergessen' (1 Stunde gültig).
+
+    Enthält einen Ausschnitt des aktuellen Passwort-Hashes: Sobald das
+    Passwort geändert wurde, passt der Ausschnitt nicht mehr und der Link
+    ist automatisch verbraucht.
+    """
+    payload = {
+        "typ": "pwreset",
+        "uid": user.id,
+        "exp": int(time.time()) + RESET_TOKEN_MAX_AGE,
+        "sig": user.password_hash[-12:],
+    }
+    return encrypt(json.dumps(payload))
+
+
+def verify_reset_token(db: Session, token: str) -> User | None:
+    """Benutzer zum Zurücksetz-Token – None bei ungültig/abgelaufen/verbraucht."""
+    try:
+        payload = json.loads(decrypt(token))
+    except Exception:
+        return None
+    if payload.get("typ") != "pwreset":
+        return None
+    if int(payload.get("exp", 0)) <= time.time():
+        return None
+    user = db.get(User, payload.get("uid"))
+    if user is None or not user.active:
+        return None
+    if payload.get("sig") != user.password_hash[-12:]:
+        return None  # Passwort wurde inzwischen geändert -> Link verbraucht
+    return user
+
+
 def create_session_token(user_id: int) -> str:
     payload = {"uid": user_id, "exp": int(time.time()) + SESSION_MAX_AGE}
     return encrypt(json.dumps(payload))
