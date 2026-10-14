@@ -109,6 +109,51 @@
 
 {% if me and me.is_admin %}
 <section class="card">
+    <h2>{{ icon('wrench', 'h-icon') }}Eigene Sortier-Regeln</h2>
+    <p class="muted">
+        Lege fest, wie Kiara deine Belege einsortiert – z.B. „Absender enthält
+        <em>aral.de</em> → Kategorie <em>fahrzeug</em>". Neue Regeln gelten sofort für
+        alle bestehenden und künftigen Belege; die erste passende Regel gewinnt.
+    </p>
+    {% if rules %}
+    <table class="table">
+        <thead><tr><th>Wenn</th><th>enthält</th><th>→ Kategorie</th><th></th></tr></thead>
+        <tbody>
+        {% for r in rules %}
+        <tr>
+            <td>{{ rule_fields.get(r.field, r.field) }}</td>
+            <td><code>{{ r.pattern }}</code></td>
+            <td><span class="tag tag-{{ r.category }}">{{ r.category }}</span></td>
+            <td class="right">
+                <form method="post" action="/settings/rules/{{ r.id }}/delete">
+                    <button type="submit" class="btn small danger">Löschen</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+    <h3>Neue Regel</h3>
+    <form method="post" action="/settings/rules" class="filter-bar">
+        <select name="field">
+            {% for key, label in rule_fields.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="pattern" required placeholder="enthält … (z.B. aral.de)">
+        <select name="category">
+            {% for c in all_categories %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn primary">Regel speichern</button>
+    </form>
+</section>
+{% endif %}
+
+{% if me and me.is_admin %}
+<section class="card">
     <h2>{{ icon('users', 'h-icon') }}Benutzer</h2>
     <p class="muted">
         Benutzerkonten legt nur ein Administrator an – es gibt keine

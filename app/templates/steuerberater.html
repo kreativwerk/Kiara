@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Steuerberater-Mappe{% endblock %}
+{% from "_icons.html" import icon %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ icon('folder', 'h-icon') }}Steuerberater-Mappe</h1>
+    <div class="actions">
+        {% if items %}
+        <a href="/steuerberater/download" class="btn primary">{{ icon('download', 'icon icon-sm') }} Alles als ZIP herunterladen</a>
+        <form method="post" action="/steuerberater/clear"
+              onsubmit="return confirm('Mappe wirklich leeren? Die Belege selbst bleiben erhalten.');">
+            <button type="submit" class="btn danger">Mappe leeren</button>
+        </form>
+        {% endif %}
+        <a href="/attachments" class="btn ghost">Zurück zu den Belegen</a>
+    </div>
+</div>
+
+<section class="card">
+    <p class="muted small">
+        Hier sammelst du Belege, die dein Steuerberater noch braucht: In der
+        <a href="/attachments">Beleg-Liste</a> auf das {{ icon('folder-plus', 'icon icon-sm') }}-Symbol
+        klicken, dann hier alles gesammelt als ZIP herunterladen – die Dateien
+        heißen automatisch <strong>Betrag_Firma</strong> (z.B. 12.845,56_Aral.pdf).
+        Das Leeren der Mappe löscht keine Belege, nur die Zusammenstellung.
+    </p>
+    {% if items %}
+    <table class="table table-belege">
+        <thead>
+            <tr><th>Unternehmen</th><th class="right">Betrag</th><th>Datum</th><th>Rechnungsnr.</th><th>Kategorie</th><th></th></tr>
+        </thead>
+        <tbody>
+        {% for item in items %}
+        {% set att = item.attachment %}
+        <tr>
+            <td class="c-vendor">
+                <a href="/attachments/{{ att.id }}/view" target="_blank" rel="noopener"
+                   data-preview data-title="{{ att | vendor }}"
+                   data-download="/attachments/{{ att.id }}/download">{{ att | vendor }}</a>
+            </td>
+            <td class="c-amount right">{{ att.detected_amount | euro }}</td>
+            <td class="c-date">{{ att.month | monthname }} {{ att.year or '' }}</td>
+            <td class="c-invoice{{ ' has-inv' if att.invoice_number else '' }}">{{ att.invoice_number or '–' }}</td>
+            <td class="c-cat"><span class="tag tag-{{ att.category }}">{{ att.category }}</span></td>
+            <td class="c-act">
+                <a class="icon-btn" href="/attachments/{{ att.id }}/view" target="_blank" rel="noopener"
+                   title="Vorschau" data-preview data-title="{{ att | vendor }}"
+                   data-download="/attachments/{{ att.id }}/download">{{ icon('eye', 'icon icon-sm') }}</a>
+                <form method="post" action="/steuerberater/remove/{{ att.id }}">
+                    <button type="submit" class="icon-btn" title="Aus der Mappe entfernen">{{ icon('x', 'icon icon-sm') }}</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Die Mappe ist leer. Lege in der <a href="/attachments">Beleg-Liste</a> Belege hinein.</p>
+    {% endif %}
+</section>
+{% endblock %}

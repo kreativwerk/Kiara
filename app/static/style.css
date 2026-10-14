@@ -250,8 +250,24 @@ body.anon .footer { color: var(--shell-ink); opacity: .7; }
     display: inline-grid; place-items: center;
     padding: .3rem; border-radius: 8px;
     color: var(--muted);
+    background: none; border: none; cursor: pointer;
 }
 .icon-btn:hover { color: var(--ink); background: var(--card-soft); }
+.icon-btn.in-mappe { color: var(--good); cursor: default; }
+.icon-btn.in-mappe:hover { background: none; }
+.c-act form { display: inline-grid; margin: 0; }
+
+/* Kategorie-Auswahl im Tag-Look (Beleg-Liste) */
+.cat-select {
+    appearance: none; -webkit-appearance: none;
+    border: none; cursor: pointer;
+    padding-right: 1.3rem;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2368766e' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right .45rem center;
+    background-size: 10px;
+}
+.cat-select:focus { outline: 2px solid var(--accent); }
 
 /* =============================== Buttons =============================== */
 
