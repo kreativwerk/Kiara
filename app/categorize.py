@@ -51,6 +51,55 @@ def categorize(filename: str, subject: str | None = None) -> str:
     return "sonstiges"
 
 
+# Alle wählbaren Kategorien (für Auswahlfelder und Validierung).
+ALL_CATEGORIES: tuple[str, ...] = (*CATEGORY_KEYWORDS.keys(), "sonstiges")
+
+# Felder, auf die sich eigene Sortier-Regeln beziehen können.
+RULE_FIELDS: dict[str, str] = {
+    "absender": "Absender-Adresse",
+    "betreff": "Betreff",
+    "datei": "Dateiname",
+}
+
+
+def load_rules(db, org_id):
+    """Sortier-Regeln einer Organisation, älteste zuerst (erste Regel gewinnt)."""
+    from sqlalchemy import select
+
+    from .models import CategoryRule
+
+    return db.execute(
+        select(CategoryRule)
+        .where(CategoryRule.org_id == org_id)
+        .order_by(CategoryRule.id)
+    ).scalars().all()
+
+
+def rule_matches(rule, sender_email: str | None, subject: str | None, filename: str | None) -> bool:
+    haystack = {
+        "absender": sender_email,
+        "betreff": subject,
+        "datei": filename,
+    }.get(rule.field) or ""
+    return rule.pattern.lower() in haystack.lower()
+
+
+def rule_category_for(
+    rules, sender_email: str | None, subject: str | None, filename: str | None
+) -> str | None:
+    """Kategorie laut eigenen Regeln (erste passende gewinnt), sonst None."""
+    for rule in rules:
+        if rule_matches(rule, sender_email, subject, filename):
+            return rule.category
+    return None
+
+
+def rule_category(
+    db, org_id, sender_email: str | None, subject: str | None, filename: str | None
+) -> str | None:
+    return rule_category_for(load_rules(db, org_id), sender_email, subject, filename)
+
+
 def is_document(filename: str) -> bool:
     """True, wenn die Dateiendung nach einem Beleg/Dokument aussieht."""
     lower = filename.lower()

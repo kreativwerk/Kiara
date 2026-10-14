@@ -363,6 +363,9 @@ async def upload_attachments(
             select(AttachmentModel.sha256).where(AttachmentModel.account_id == account.id)
         ).scalars()
     )
+    from ..categorize import load_rules, rule_category_for
+
+    rules = load_rules(db, org)
 
     saved = 0
     duplicates = 0
@@ -392,7 +395,7 @@ async def upload_attachments(
                 stored_path=stored.relative_path,
                 year=stored.year,
                 month=stored.month,
-                category=stored.category,
+                category=rule_category_for(rules, None, None, filename) or stored.category,
                 detected_amount=stored.detected_amount,
                 invoice_number=stored.invoice_number,
                 text_content=stored.text_content,
@@ -481,6 +484,15 @@ def attachments_page(
         .distinct().order_by(Attachment.year.desc())
     ).scalars().all()
 
+    from ..categorize import ALL_CATEGORIES
+    from ..models import AdvisorItem
+
+    advisor_ids = set(
+        db.execute(
+            select(AdvisorItem.attachment_id).where(AdvisorItem.org_id == org)
+        ).scalars()
+    )
+
     return templates.TemplateResponse(
         request,
         "attachments.html",
@@ -488,6 +500,9 @@ def attachments_page(
             "attachments": attachments,
             "accounts": accounts,
             "categories": categories,
+            "all_categories": ALL_CATEGORIES,
+            "advisor_ids": advisor_ids,
+            "advisor_count": len(advisor_ids),
             "years": [y for y in years if y],
             "f_account": account_filter,
             "f_category": category,
@@ -495,6 +510,8 @@ def attachments_page(
             "f_q": q or "",
             "year_options": list(range(today.year, today.year - 8, -1)),
             "current_month": today.month,
+            "msg": request.query_params.get("msg"),
+            "error": request.query_params.get("error"),
         },
     )
 
@@ -561,6 +578,207 @@ def download_attachment(attachment_id: int, request: Request, db: Session = Depe
         str(full_path),
         filename=_download_name(attachment),
         media_type=attachment.content_type or "application/octet-stream",
+    )
+
+
+@router.post("/attachments/{attachment_id}/category")
+def change_category(
+    attachment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    category: str = Form(...),
+):
+    """Kategorie eines Belegs von Hand korrigieren."""
+    from ..categorize import ALL_CATEGORIES
+
+    attachment = db.get(Attachment, attachment_id)
+    if not attachment or attachment.org_id != _org(request):
+        return _redirect("/attachments", "Anhang nicht gefunden.", error=True)
+    if category not in ALL_CATEGORIES:
+        return _redirect("/attachments", "Unbekannte Kategorie.", error=True)
+    attachment.category = category
+    db.commit()
+    back = request.headers.get("referer") or "/attachments"
+    return RedirectResponse(back, status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Eigene Sortier-Regeln
+# ---------------------------------------------------------------------------
+
+
+@router.post("/settings/rules")
+def create_rule(
+    request: Request,
+    db: Session = Depends(get_db),
+    field: str = Form(...),
+    pattern: str = Form(...),
+    category: str = Form(...),
+):
+    from ..categorize import ALL_CATEGORIES, RULE_FIELDS, load_rules, rule_category_for
+    from ..models import CategoryRule
+
+    actor = _current_user(request, db)
+    if not actor or not actor.is_admin:
+        return _redirect("/settings", "Nur Administratoren dürfen Regeln verwalten.", error=True)
+    pattern = pattern.strip()
+    if field not in RULE_FIELDS or category not in ALL_CATEGORIES or not pattern:
+        return _redirect("/settings", "Bitte Feld, Suchtext und Kategorie angeben.", error=True)
+
+    org = actor.org_id
+    db.add(CategoryRule(org_id=org, field=field, pattern=pattern, category=category))
+    db.commit()
+
+    # Regel sofort rückwirkend anwenden (erste passende Regel gewinnt weiterhin).
+    rules = load_rules(db, org)
+    attachments = db.execute(
+        select(Attachment).where(Attachment.org_id == org)
+    ).scalars().all()
+    changed = 0
+    for att in attachments:
+        new_category = rule_category_for(rules, att.sender_email, att.subject, att.filename)
+        if new_category and new_category != att.category:
+            att.category = new_category
+            changed += 1
+    db.commit()
+    message = f"Regel gespeichert – gilt ab sofort für alle neuen Belege."
+    if changed:
+        message = f"Regel gespeichert und auf {changed} bestehende Belege angewendet."
+    return _redirect("/settings", message)
+
+
+@router.post("/settings/rules/{rule_id}/delete")
+def delete_rule(rule_id: int, request: Request, db: Session = Depends(get_db)):
+    from ..models import CategoryRule
+
+    actor = _current_user(request, db)
+    if not actor or not actor.is_admin:
+        return _redirect("/settings", "Nur Administratoren dürfen Regeln verwalten.", error=True)
+    rule = db.get(CategoryRule, rule_id)
+    if not rule or rule.org_id != actor.org_id:
+        return _redirect("/settings", "Regel nicht gefunden.", error=True)
+    db.delete(rule)
+    db.commit()
+    return _redirect("/settings", "Regel gelöscht. Bereits einsortierte Belege bleiben unverändert.")
+
+
+# ---------------------------------------------------------------------------
+# Steuerberater-Mappe (Sammelordner mit ZIP-Download)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/steuerberater")
+def advisor_page(request: Request, db: Session = Depends(get_db)):
+    from ..models import AdvisorItem
+
+    org = _org(request)
+    items = db.execute(
+        select(AdvisorItem).join(Attachment, AdvisorItem.attachment_id == Attachment.id)
+        .where(AdvisorItem.org_id == org)
+        .order_by(AdvisorItem.created_at.desc())
+    ).scalars().all()
+    return templates.TemplateResponse(
+        request,
+        "steuerberater.html",
+        {
+            "items": items,
+            "msg": request.query_params.get("msg"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/steuerberater/add/{attachment_id}")
+def advisor_add(attachment_id: int, request: Request, db: Session = Depends(get_db)):
+    from sqlalchemy.exc import IntegrityError
+
+    from ..models import AdvisorItem
+
+    org = _org(request)
+    attachment = db.get(Attachment, attachment_id)
+    if not attachment or attachment.org_id != org:
+        return _redirect("/attachments", "Anhang nicht gefunden.", error=True)
+    try:
+        db.add(AdvisorItem(org_id=org, attachment_id=attachment.id))
+        db.commit()
+        msg = "Beleg in die Steuerberater-Mappe gelegt."
+    except IntegrityError:
+        db.rollback()
+        msg = "Beleg liegt schon in der Steuerberater-Mappe."
+    back = (request.headers.get("referer") or "/attachments").split("?")[0]
+    return RedirectResponse(f"{back}?msg={msg}", status_code=303)
+
+
+@router.post("/steuerberater/remove/{attachment_id}")
+def advisor_remove(attachment_id: int, request: Request, db: Session = Depends(get_db)):
+    from ..models import AdvisorItem
+
+    db.query(AdvisorItem).filter(
+        AdvisorItem.org_id == _org(request), AdvisorItem.attachment_id == attachment_id
+    ).delete(synchronize_session=False)
+    db.commit()
+    return _redirect("/steuerberater", "Beleg aus der Mappe entfernt.")
+
+
+@router.post("/steuerberater/clear")
+def advisor_clear(request: Request, db: Session = Depends(get_db)):
+    from ..models import AdvisorItem
+
+    deleted = db.query(AdvisorItem).filter(AdvisorItem.org_id == _org(request)).delete(
+        synchronize_session=False
+    )
+    db.commit()
+    return _redirect("/steuerberater", f"Mappe geleert ({deleted} Belege entfernt).")
+
+
+@router.get("/steuerberater/download")
+def advisor_download(request: Request, db: Session = Depends(get_db)):
+    """Alle Belege der Mappe als ZIP – Dateinamen im Schema Betrag_Firma."""
+    import io
+    import zipfile
+    from datetime import date as _date
+
+    from fastapi.responses import Response
+
+    from ..models import AdvisorItem
+
+    org = _org(request)
+    items = db.execute(
+        select(AdvisorItem).join(Attachment, AdvisorItem.attachment_id == Attachment.id)
+        .where(AdvisorItem.org_id == org)
+        .order_by(AdvisorItem.created_at)
+    ).scalars().all()
+    if not items:
+        return _redirect("/steuerberater", "Die Mappe ist leer – erst Belege hineinlegen.", error=True)
+
+    settings = get_settings()
+    buffer = io.BytesIO()
+    used_names: set[str] = set()
+    packed = 0
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for item in items:
+            attachment = item.attachment
+            full_path = settings.data_dir / attachment.stored_path
+            if not full_path.exists():
+                continue
+            name = _download_name(attachment)
+            if name in used_names:
+                stem, dot, ext = name.rpartition(".")
+                counter = 2
+                while name in used_names:
+                    name = f"{stem}_{counter}.{ext}" if dot else f"{name}_{counter}"
+                    counter += 1
+            used_names.add(name)
+            archive.write(full_path, arcname=name)
+            packed += 1
+    if not packed:
+        return _redirect("/steuerberater", "Keine der Dateien ist mehr vorhanden.", error=True)
+
+    zip_name = f"Steuerberater-Belege_{_date.today().isoformat()}.zip"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
     )
 
 
@@ -1051,6 +1269,17 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
             .where(EmailAccount.provider != "manuell")
             .order_by(EmailAccount.name)
         ).scalars().all()
+
+    from ..categorize import ALL_CATEGORIES, RULE_FIELDS
+    from ..models import CategoryRule
+
+    rules = []
+    if me and me.is_admin:
+        rules = db.execute(
+            select(CategoryRule)
+            .where(CategoryRule.org_id == me.org_id)
+            .order_by(CategoryRule.id)
+        ).scalars().all()
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -1064,6 +1293,9 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
             "org_names": org_names,
             "mail_account": mail_account,
             "mail_accounts": mail_accounts,
+            "rules": rules,
+            "rule_fields": RULE_FIELDS,
+            "all_categories": ALL_CATEGORIES,
             "msg": request.query_params.get("msg"),
             "error": request.query_params.get("error"),
         },

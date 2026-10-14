@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..categorize import is_document
+from ..categorize import is_document, rule_category_for
 from ..config import get_settings
 from ..models import Attachment, Email, EmailAccount
 from ..security import decrypt
@@ -137,6 +137,10 @@ def _do_sync(db: Session, account: EmailAccount, max_fetch: int | None = None) -
         return result
 
     known = _known_hashes(db, account.id)
+    # Eigene Sortier-Regeln der Organisation (überstimmen die Standard-Kategorie).
+    from ..categorize import load_rules
+
+    rules = load_rules(db, account.org_id)
 
     try:
         with imap_client.connection(
@@ -191,6 +195,12 @@ def _do_sync(db: Session, account: EmailAccount, max_fetch: int | None = None) -
                                 result.skipped_duplicates += 1
                                 continue
                             known.add(stored.sha256)
+                            category = (
+                                rule_category_for(
+                                    rules, msg.sender_email, msg.subject, att.filename
+                                )
+                                or stored.category
+                            )
                             db.add(
                                 Attachment(
                                     org_id=account.org_id,
@@ -203,7 +213,7 @@ def _do_sync(db: Session, account: EmailAccount, max_fetch: int | None = None) -
                                     stored_path=stored.relative_path,
                                     year=stored.year,
                                     month=stored.month,
-                                    category=stored.category,
+                                    category=category,
                                     detected_amount=stored.detected_amount,
                                     invoice_number=stored.invoice_number,
                                     text_content=stored.text_content,

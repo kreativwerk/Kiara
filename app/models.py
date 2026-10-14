@@ -115,6 +115,9 @@ class Attachment(Base):
     matches: Mapped[list["Match"]] = relationship(
         back_populates="attachment", cascade="all, delete-orphan"
     )
+    advisor_items: Mapped[list["AdvisorItem"]] = relationship(
+        back_populates="attachment", cascade="all, delete-orphan"
+    )
 
 
 class BankStatement(Base):
@@ -196,6 +199,39 @@ class AppSetting(Base):
 
     key: Mapped[str] = mapped_column(String(80), primary_key=True)
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class CategoryRule(Base):
+    """Eigene Sortier-Regel pro Organisation: 'Wenn <Feld> <Muster> enthält -> Kategorie'."""
+
+    __tablename__ = "category_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True, index=True
+    )
+    field: Mapped[str] = mapped_column(String(20), default="absender")  # absender|betreff|datei
+    pattern: Mapped[str] = mapped_column(String(200))
+    category: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AdvisorItem(Base):
+    """Beleg in der Steuerberater-Mappe (Sammelordner pro Organisation)."""
+
+    __tablename__ = "advisor_items"
+    __table_args__ = (
+        UniqueConstraint("org_id", "attachment_id", name="uq_advisor_item"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True, index=True
+    )
+    attachment_id: Mapped[int] = mapped_column(ForeignKey("attachments.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    attachment: Mapped["Attachment"] = relationship(back_populates="advisor_items")
 
 
 class Match(Base):
